@@ -1,0 +1,96 @@
+@startuml
+!pragma teoz true
+title All-to-All Communication (20 Workers, 19 Rounds)
+
+participant Master
+participant "Worker1" as W1
+participant "Worker2" as W2
+participant "Worker3" as W3
+participant "Worker4" as W4
+participant "..." as Wn
+participant "Worker18" as W18
+participant "Worker19" as W19
+participant "Worker20" as W20
+
+== Round 1 ==
+
+activate Master
+Master -> W1: Start Round 1
+& Master -> W2:  
+& Master -> W3: 
+& Master -> W4:
+& Master -> Wn:
+& Master -> W18: 
+& Master -> W19: 
+& Master -> W20: 
+
+
+
+par Round 1 Communication
+    activate W1
+    activate W3
+    activate Wn
+    activate W19
+    W1 <- W2: gRPC request (W2→W1)
+    & W3 <- W4: gRPC request (W4→W3)
+    & Wn <- W18: gRPC request (W18→W17)
+    & W19 <- W20: gRPC request (W20→W19)
+end
+
+W1 -> Master: Report "Round 1 done"
+    deactivate W1
+W2 -> Master: Report "Round 1 done"
+...
+W20 -> Master: Report "Round 1 done"
+    deactivate W3
+    deactivate Wn
+    deactivate W19
+
+Master -> Master: Wait until 20 reports received
+
+Master -> W1: Start Round 2
+& Master -> W2:  
+& Master -> W3: 
+& Master -> W4:
+& Master -> Wn:
+& Master -> W18: 
+& Master -> W19: 
+& Master -> W20: 
+
+== Round 2 ==
+par Round 2 Communication
+    activate W1
+    activate W2
+    activate Wn
+    activate W18
+    W1 <- W3: gRPC request (W3→W1)
+    & W2 <- W4: gRPC request (W4→W2)
+    & W18 <- W20: gRPC request (W20→W18)
+end
+
+W1 -> Master: Report "Round 2 done"
+    deactivate W1
+...
+W20 -> Master: Report "Round 2 done"
+    deactivate W2
+    deactivate Wn
+    deactivate W18
+
+Master -> Master: Wait until 20 reports received
+Master -> all: Start Round 3
+...
+
+== Repeat ==
+note over Master, W20
+Process repeats for total 19 rounds.
+Each round:
+1. Master broadcasts "Start round".
+2. Each pair communicates via gRPC.
+3. Worker with smaller ID server, larger ID client.
+4. Each worker reports done.
+5. Master triggers next round.
+end note
+
+Master -> Master: Wait until 20 reports received
+deactivate Master
+@enduml

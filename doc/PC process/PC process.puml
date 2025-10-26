@@ -1,0 +1,62 @@
+@startuml
+
+participant Worker
+participant Master
+
+Worker -> Master: Registration Request
+note left
+    ip, port
+end note
+Master -> Worker: Registration Acknowledgment
+Master -> Worker: Registration Result
+note right
+    worker number
+    (first worker, second worker...)
+end note
+Worker -> Master: Registration Result Acknowledgment
+
+== Main Sorting Workflow ==
+Worker -> Worker : Local Sorting
+
+Worker -> Master: Sampling Request
+note left
+    sampling data
+end note
+Master -> Worker: Sampling Acknowledgment
+
+Master -> Worker: Sampling Result
+note right
+    quantiles, ip and port of each worker
+end note
+Worker -> Master: Sampling Result Acknowledgment
+
+Worker -> Worker : Partitioning
+Worker -> Worker : Shuffling
+note left
+    data exchange between workers
+end note
+Worker -> Worker : Local Sorting
+Worker -> Master: Sorting End Notification
+note left
+    worker number
+end note
+alt all workers notified
+    Master -> Worker: Job Completion Acknowledgment
+else waiting for other workers
+    Master -> Worker: Wait for Other Workers
+end alt
+
+
+== When 21st Registration Request Arrives ==
+Master -> Worker: Dead Worker Notification
+Worker -> Master: Dead Worker Acknowledgment
+note left
+    worker number
+end note
+Master -> Worker: Dead Worker Result
+note right
+    ip, port of new worker
+    worker number of new worker
+end note
+Worker -> Master: Dead Worker Result Acknowledgment
+@enduml

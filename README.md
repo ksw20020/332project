@@ -4,7 +4,7 @@
 
 ### Week 1 [link](https://github.com/ksw20020/332project/pull/1)
 리포지토리 개설<br>
-샘플링 기법 탐색 [link](doc/sampling.md)<br>
+샘플링 기법 탐색  [link](doc/sampling.md)<br>
 통신 시퀀스 다이어그램 작성 [link](doc/PC%20process/PC%20process.puml)<br>
 
 ### Week 2 [link](https://github.com/ksw20020/332project/pull/2)

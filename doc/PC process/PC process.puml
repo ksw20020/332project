@@ -5,15 +5,26 @@ participant Master
 
 Worker -> Master: Registration Request
 note left
-    ip, port
+    type: "REGISTER_REQ",
+    ip:
+    port:
 end note
 Master -> Worker: Registration Acknowledgment
+note right
+    type: "REGISTER_ACK"
+    message: "received"
+end note
 Master -> Worker: Registration Result
 note right
-    worker number
-    (first worker, second worker...)
+    type: "REGISTER_RESULT"
+    worker number:
+    message: "You are the ""th worker"
 end note
 Worker -> Master: Registration Result Acknowledgment
+note left
+    type: "RESULT_ACK",
+    message: "ok"
+end note
 
 == Main Sorting Workflow ==
 Worker -> Worker : Local Sorting

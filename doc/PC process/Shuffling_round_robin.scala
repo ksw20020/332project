@@ -21,6 +21,3 @@ def roundRobinPairs(n: Int): List[List[(Int, Int)]] = {
 
 println("--- n = 20 ---")
 val rrp = roundRobinPairs(20)
-rrp.foreach(println) // 전체 페어
-println(rrp.flatten.length) // 페어 수
-println(rrp.flatten.toSet.size) // 유니크한 페어의 수

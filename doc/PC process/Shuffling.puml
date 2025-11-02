@@ -1,6 +1,6 @@
 @startuml
 !pragma teoz true
-title All-to-All Communication (20 Workers, 19 Rounds)
+title All-to-All Communication (Persistent Master Stream, Per-Round Worker Exchanges, Workers = 20)
 
 participant Master
 participant "Worker1" as W1
@@ -12,85 +12,253 @@ participant "Worker18" as W18
 participant "Worker19" as W19
 participant "Worker20" as W20
 
-== Round 1 ==
-
-activate Master
-Master -> W1: Start Round 1
-& Master -> W2:  
-& Master -> W3: 
-& Master -> W4:
-& Master -> Wn:
-& Master -> W18: 
-& Master -> W19: 
-& Master -> W20: 
-
-
-
-par Round 1 Communication
-    activate W1
-    activate W3
-    activate Wn
-    activate W19
-    W1 <- W2: gRPC request (W2→W1)
-    & W3 <- W4: gRPC request (W4→W3)
-    & Wn <- W18: gRPC request (W18→W17)
-    & W19 <- W20: gRPC request (W20→W19)
-end
-
-W1 -> Master: Report "Round 1 done"
-    deactivate W1
-W2 -> Master: Report "Round 1 done"
-...
-W20 -> Master: Report "Round 1 done"
-    deactivate W3
-    deactivate Wn
-    deactivate W19
-
-Master -> Master: Wait until 20 reports received
-
-Master -> W1: Start Round 2
-& Master -> W2:  
-& Master -> W3: 
-& Master -> W4:
-& Master -> Wn:
-& Master -> W18: 
-& Master -> W19: 
-& Master -> W20: 
-
-== Round 2 ==
-par Round 2 Communication
-    activate W1
-    activate W2
-    activate Wn
-    activate W18
-    W1 <- W3: gRPC request (W3→W1)
-    & W2 <- W4: gRPC request (W4→W2)
-    & W18 <- W20: gRPC request (W20→W18)
-end
-
-W1 -> Master: Report "Round 2 done"
-    deactivate W1
-...
-W20 -> Master: Report "Round 2 done"
-    deactivate W2
-    deactivate Wn
-    deactivate W18
-
-Master -> Master: Wait until 20 reports received
-Master -> all: Start Round 3
-...
-
-== Repeat ==
-note over Master, W20
-Process repeats for total 19 rounds.
-Each round:
-1. Master broadcasts "Start round".
-2. Each pair communicates via gRPC.
-3. Worker with smaller ID server, larger ID client.
-4. Each worker reports done.
-5. Master triggers next round.
+note over W1, W20
+Workers have pre-loaded RoundPairTable[N][round].
+For each round:
+- Determine partner for the round.
+- Smaller ID = gRPC Server (listener).
+- Larger ID = gRPC Client (initiator).
+- Master ↔ Worker: persistent gRPC stream (single connection for entire shuffle)
+- Worker ↔ Worker: per-round single connections
 end note
 
-Master -> Master: Wait until 20 reports received
+activate Master
+Master -> W1: OpenPersistentStream()
+Master -> W2: OpenPersistentStream()
+...
+Master -> W20: OpenPersistentStream()
+activate all
+
+note over Master, all
+This stream carries:
+- StartRound(round_id)
+- RoundDone(round_id, worker_id)
+- EndShuffle
+end note
+
+
+' =====================================================
+'                         ROUND 1
+' =====================================================
+== Round 1 Start ==
+Master -> all: StartRound (via persistent stream)
+note left
+message: StartRound
+fields:
+  round = 1
+end note
+
+par Round 1 Worker-to-Worker Communication(concurrent)
+
+    activate W2
+    W2 -> W1: ExchangeRoundDataRequest
+    note right of W2
+    message: ExchangeRoundDataRequest
+    fields:
+      round = 1
+      sender_id = 2
+      payload
+    end note
+
+    activate W1
+    W1 --> W2: ExchangeRoundDataResponse
+    note right of W1
+    message: ExchangeRoundDataResponse
+    fields:
+      round = 1
+      status = OK
+      payload
+    end note
+    deactivate W1
+    deactivate W2
+
+    activate W4
+    W4 -> W3: ExchangeRoundDataRequest
+    note right of W4
+    message: ExchangeRoundDataRequest
+    fields:
+      round = 1
+      sender_id = 4
+      payload
+    end note
+
+    activate W3
+    W3 --> W4: ExchangeRoundDataResponse
+    note right of W3
+    message: ExchangeRoundDataResponse
+    fields:
+      round = 1
+      status = OK
+      payload
+    end note
+    deactivate W3
+    deactivate W4
+
+    activate W20
+    W20 -> W19: ExchangeRoundDataRequest
+    note right of W20
+    message: ExchangeRoundDataRequest
+    fields:
+      round = 1
+      sender_id = 20
+      payload
+    end note
+
+    activate W19
+    W19 --> W20: ExchangeRoundDataResponse
+    note right of W19
+    message: ExchangeRoundDataResponse
+    fields:
+      round = 1
+      status = OK
+      payload
+    end note
+    deactivate W19
+    deactivate W20
+
+end
+
+W1 -> Master: RoundDone
+note right of W1
+message: RoundDone
+fields:
+  round = 1
+  worker_id = 1
+end note
+W2 -> Master: RoundDone
+note right of W2
+message: RoundDone
+fields:
+  round = 1
+  worker_id = 2
+end note
+...
+W20 -> Master: RoundDone
+note right of W20
+message: RoundDone
+fields:
+  round = 1
+  worker_id = 20
+end note
+Master -> Master: Wait until all RoundDone received
+
+
+' =====================================================
+'                         ROUND 2
+' =====================================================
+Master -> all: StartRound (persistent stream)
+note left
+message: StartRound
+fields:
+  round = 1
+end note
+
+par Round 2 Worker-to-Worker Communication
+
+    activate W3
+    W3 -> W1: ExchangeRoundDataRequest
+    note right of W3
+    message: ExchangeRoundDataRequest
+    fields:
+      round = 2
+      sender_id = 3
+      payload
+    end note
+
+    activate W1
+    W1 --> W3: ExchangeRoundDataResponse
+    note right of W1
+    message: ExchangeRoundDataResponse
+    fields:
+      round = 2
+      status = OK
+      payload
+    end note
+    deactivate W1
+    deactivate W3
+
+
+    activate W4
+    W4 -> W2: ExchangeRoundDataRequest
+    note right of W4
+    message: ExchangeRoundDataRequest
+    fields:
+      round = 2
+      sender_id = 4
+      payload
+    end note
+
+    activate W2
+    W2 --> W4: ExchangeRoundDataResponse
+    note right of W2
+    message: ExchangeRoundDataResponse
+    fields:
+      round = 2
+      status = OK
+      payload
+    end note
+    deactivate W2
+    deactivate W4
+
+
+    activate W20
+    W20 -> W18: ExchangeRoundDataRequest
+    note right of W20
+    message: ExchangeRoundDataRequest
+    fields:
+      round = 2
+      sender_id = 20
+      payload
+    end note
+
+    activate W18
+    W18 --> W20: ExchangeRoundDataResponse
+    note right of W18
+    message: ExchangeRoundDataResponse
+    fields:
+      round = 2
+      status = OK
+      payload
+    end note
+    deactivate W18
+    deactivate W20
+
+end
+
+W1 -> Master: RoundDone
+note right of W1
+message: RoundDone
+fields:
+  round = 2
+  worker_id = 1
+end note
+...
+W20 -> Master: RoundDone
+note right of W20
+message: RoundDone
+fields:
+  round = 2
+  worker_id = 20
+end note
+Master -> Master: Wait until all RoundDone(2) received
+
+
+' =====================================================
+'                   ROUNDS 3 ~ 20
+' =====================================================
+== Round 3 ~ Round 20 ==
+note over Master, all
+Pattern repeats for rounds 3 to 20 using RoundPairTable.
+Worker-to-Worker connections are per round.
+Master communicates over persistent streams.
+end note
+
+
+Master -> all: EndShuffle (persistent stream)
+note left
+  protobuf.empty
+end note
+all -> Master: close stream
 deactivate Master
+
 @enduml

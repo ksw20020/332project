@@ -34,6 +34,8 @@ This stream carries:
 - StartRound(round_id)
 - RoundDone(round_id, worker_id)
 - EndShuffle
+
+And check worker's liveness, wait for rebooted worker for fault-tolerance.
 end note
 
 

@@ -29,9 +29,9 @@ Shuffling 통신 시퀀스 다이어그램 작성 [link](doc/PC%20process/Shuffl
    
 </details>
 
-register 통신 프로토콜 확정(handshake), 다이어그램 업데이트
-shuffling 마스터-워커 통신 프로토콜 확정(스트리밍), 다이어그램 업데이트
-shuffling 라운드 로빈 페어 매칭 알고리즘 확정
+register 통신 프로토콜 확정(handshake), 다이어그램 업데이트<br>
+shuffling 마스터-워커 통신 프로토콜 확정(스트리밍), 다이어그램 업데이트<br>
+shuffling 라운드 로빈 페어 매칭 알고리즘 확정<br>
 
 #### goal of next week
 | Member | Goal |

@@ -1,0 +1,74 @@
+@startuml
+
+package Worker {
+    object MainWorker 
+
+    folder "Managers" {
+        class ShuffleManager {
+            + executeRounds(allRounds)
+            + executeRound(roundId)
+            + reportDoneToMaster(roundId)
+            + waitForNextRoundSignal()
+        }
+
+        class PartitionManager {
+            + partition(path, percentiles)
+        }
+    }
+
+    folder "Services" {
+        class ShuffleWorkerService {
+            + executeRound(roundId)
+            - openWorkerStream(targetWorkerId)
+            - onChunkReceived()
+            - closeWorkerStream()
+        }
+
+        class ShuffleMasterService {
+            + reportRoundCompleteToMaster(roundId)
+            + waitForMasterNextRound() : RoundId
+            - openMasterStream()
+            - onNextRoundSignal()
+        }
+
+        class PartitionService {
+            + partition(path, percentiles)
+        }
+    }
+    
+    folder "Repositories" {
+        class GrpcShuffleRepository {
+            StreamObserver activeStreamObserver
+
+            + sendChunk(chunk)
+            + receiveChunkHandler(handler)
+            + reportRoundCompleteToMaster(roundId)
+            + waitForMasterNextRound()
+            + receiveNextRoundHandler(handler)
+            
+            - openServer()
+            - openClient()
+            - openStreamToMaster()
+            - close()
+        }
+            
+        class FileStorageRepository {
+            + read(path, amount) : data
+            + save(path, data)
+        }
+    }
+    
+    folder Model {
+        object GrpcShuffleStream <<Proto>>
+    }
+
+    ' Relationships
+    MainWorker --> Managers
+    Managers --> Services
+    Services --> Repositories
+    Repositories --> Model
+
+}
+
+
+@enduml

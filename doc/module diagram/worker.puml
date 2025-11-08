@@ -1,4 +1,4 @@
-@startuml
+@startuml Worker_Module_Diagram
 
 package Worker {
     object MainWorker 
@@ -13,6 +13,20 @@ package Worker {
 
         class PartitionManager {
             + partition(path, percentiles)
+        }
+        
+        class SortPartitionTask {
+            - inputFilePath: String
+            - partitionRanges: Array[PartitionRange]
+            - tempDir: String
+            + execute()
+            --
+            + localSort()   // << Local Sorting Logic >>
+            + partitionRecords() // << Partitioning Logic >>
+        }
+        
+        class Partitioner {
+            + getDestination(key, ranges): (Int, Int) // Binary Search
         }
     }
 
@@ -53,22 +67,49 @@ package Worker {
         }
             
         class FileStorageRepository {
-            + read(path, amount) : data
-            + save(path, data)
+            + read(path, amount) : data // For reading input block
+            + save(path, data)        // For writing temp partition
         }
     }
     
     folder Model {
         object GrpcShuffleStream <<Proto>>
+        
+        class RecordKey {
+            + key: Array[Byte] (10)
+            + compareTo(other): Int
+        }
+        
+        class Record {
+            + bytes: Array[Byte] (100)
+            + key: RecordKey
+        }
+        
+        class PartitionRange {
+            + startKey: RecordKey
+            + endKey: RecordKey
+            + destWorkerId: Int
+        }
     }
 
     ' Relationships
+    MainWorker --> PartitionManager : Triggers Sort/Partition
+    PartitionManager --> SortPartitionTask : Manages thread pool & tasks
+    
+    SortPartitionTask ..> Partitioner : Uses to determine destination
+    SortPartitionTask ..> Record : Processes
+    SortPartitionTask ..> PartitionRange : Reads partition info
+    SortPartitionTask ..> FileStorageRepository : Reads input, Writes temp partitions
+    
+    ' Model relationships
+    Record o-- RecordKey
+    PartitionRange o-- RecordKey
+    
+    ' Existing Relationships
     MainWorker --> Managers
     Managers --> Services
     Services --> Repositories
     Repositories --> Model
 
 }
-
-
 @enduml

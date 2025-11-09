@@ -1,0 +1,137 @@
+@startuml Worker_Module_Diagram
+
+package Worker {
+    object MainWorker 
+
+    folder "Managers" {
+        class ShuffleManager {
+            + executeRounds(allRounds)
+            + executeRound(roundId)
+            + reportDoneToMaster(roundId)
+            + waitForNextRoundSignal()
+        }
+
+        class SortPartitionManager {
+            - inputFilePath: String
+            - partitionRanges: Array[PartitionRange]
+            - tempDir: String
+            + sort()
+            + partition(path, percentiles)
+        }
+        
+    }
+
+    folder "Services" {
+        
+        class SortService {
+            + execute()
+            --
+            + localSort()
+        }
+
+        class PartitionService {
+            + partitionRecords()
+        }
+
+        class Partitioner {
+            + getDestination(key, ranges): (Int, Int)
+        }
+
+        class ShuffleWorkerService {
+            + executeRound(roundId)
+            - openWorkerStream(targetWorkerId)
+            - onChunkReceived()
+            - closeWorkerStream()
+        }
+
+        class ShuffleMasterService {
+            + reportRoundCompleteToMaster(roundId)
+            + waitForMasterNextRound() : RoundId
+            - openMasterStream()
+            - onNextRoundSignal()
+
+            + start(ip, port)
+            - onDeadWorker(deadWorkerId: Int)
+        }
+    }
+    
+    folder "Repositories" {
+        interface GrpcRepository {
+            
+            - openServer()
+            - openClient()
+            - close()
+
+        }
+
+        class GrpcShuffleRepository {
+            StreamObserver activeStreamObserver
+
+            + sendChunk(chunk)
+            + receiveChunkHandler(handler)
+            + reportRoundCompleteToMaster(roundId)
+            + waitForMasterNextRound()
+            + receiveNextRoundHandler(handler)
+            
+            - openStreamToMaster()
+            + onDeadWorkerHandler(handler)
+        }
+
+        class GrpcRegistrationRepository {
+            StreamObserver activeStreamObserver
+
+            - openStreamToMaster()
+
+            + registerToMaster(ip: String, port: Int, version: String = "v1")
+            + onStreamConnectedHandler(handler)
+        }
+
+        class GrpcSamplingRepository {
+            StreamObserver activeStreamObserver
+
+            ...
+        }
+            
+        class FileStorageRepository {
+            + read(path, amount) : data
+            + save(path, data)
+        }
+    }
+    
+    folder Model {
+        object GrpcShuffleStream <<Proto>>
+        
+        class RecordKey {
+            + key: Array[Byte] (10)
+            + compareTo(other): Int
+        }
+        
+        class Record {
+            + bytes: Array[Byte] (100)
+            + key: RecordKey
+        }
+        
+        class PartitionRange {
+            + startKey: RecordKey
+            + endKey: RecordKey
+            + destWorkerId: Int
+        }
+
+        class Register   <<ProtoMsg>>
+
+    }
+
+    ' Relationships
+    SortService ..> Partitioner : Uses to determine destination
+    
+    ' Model relationships
+    Record o-- RecordKey
+    PartitionRange o-- RecordKey
+    
+    ' Existing Relationships
+    MainWorker --> Managers
+    Managers --> Services
+    Services --> Repositories
+
+}
+@enduml

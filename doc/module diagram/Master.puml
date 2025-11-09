@@ -1,0 +1,92 @@
+@startuml
+
+package Master {
+    object MainMaster {
+        WorkerInfos workerInfos
+    }
+
+    folder "Managers" {
+        class RegistrationManager {
+
+        }
+
+        class ShuffleManager {
+            + executeRounds(allRounds)
+            + executeRound(roundId)
+        }
+    }
+
+    folder "Services" {
+        class RegistrationService {
+
+        }
+
+        class SamplingService {
+
+        }
+
+        class ShuffleWorkerService {
+            + broadcastNextRound(newRound: Int)
+            + broadcastDeadWorker(workerId: Int)
+
+            - onWorkerRoundDone(workerId: Int)
+            - onWorkerDead(workerId: Int)
+
+            - onWorkerRegister(workerId: Int, ip: String, port: Int)
+            - onHeartbeat(workerId: Int)
+            + start()
+        }
+    }
+    
+    folder "Repositories" {
+        
+        interface GrpcRepository {
+            
+            - openServer()
+            - close()
+
+        }
+
+        class GrpcRegistrationRepository {
+            + onRegisterHandler(handler)
+            + onStreamOpenedHandler(handler)
+
+        }
+
+        class GrpcSamplingRepository {
+            + sendSampleRequest(workerId: Int, sampleSize: Int)
+            + onSampleResponseHandler(handler)
+        }
+
+        class GrpcShuffleRepository {
+            Map<Int, StreamObserver> streamObservers
+
+            + sendNextRound(workerId: Int, round: Int)
+            + sendDeadWorker(workerId: Int, round: Int = 0)
+            + onWorkerRoundDoneHandler(handler)
+            + onWorkerDeadHandler(handler)
+
+            - openServer()
+            - close()
+
+            + onRegisterHandler(handler)
+            + onHeartbeatHandler(handler)
+            + onStreamOpenedHandler(handler)
+        }
+    }
+    
+    folder Model {
+        object GrpcShuffleStream <<Proto>>
+
+        class Register  <<ProtoMsg>>
+    }
+
+    ' Relationships
+    MainMaster --> Managers
+    Managers --> Services
+    Services --> Repositories
+    
+}
+
+
+@enduml

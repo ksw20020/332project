@@ -1,0 +1,135 @@
+@startuml
+!pragma teoz true
+title Master ↔ Worker Control Stream (Register → Round Orchestration)
+
+participant Worker as W
+participant "GrpcShuffleRepository\n(Worker)" as WR
+participant "ShuffleMasterService\n(Worker)" as WSvc
+participant "ShuffleManager\n(Worker)" as WMgr
+
+participant Master as M
+participant "GrpcShuffleRepository\n(Master)" as MR
+participant "ShuffleWorkerService\n(Master)" as MSvc
+participant "ShuffleManager\n(Master)" as MMgr
+
+== Control Stream Open & Register ==
+W -> WR: openStreamToMaster()
+activate WR
+WR -> MR: ControlStream() [bidi open]
+activate MR
+note right of MR
+  Bidirectional gRPC stream established
+  between Worker and Master.
+end note
+
+WR -> MR: Event{Register(ip,port,version)}
+note right of WR
+  Worker registers itself with IP, port, and version info.
+end note
+
+MR -> MSvc: onControlStreamOpened(workerStream)
+MSvc -> MR: bind onWorkerRoundDoneHandler/onWorkerDeadHandler
+note right of MR
+  Master binds callbacks for round completion
+  and worker failure events.
+end note
+
+MR -> WR: Control{NextRound(roundId=0)}  // can act as RegisterAck + Round0 start
+note right of MR
+  Alternatively, Master can send a separate
+  RegisterAck first, then NextRound(0).
+end note
+
+== Round 0 : Sampling Phase ==
+MR -> WR: Control{NextRound(roundId=0, type="sampling")}
+note right of WR
+  Worker performs local sampling of data
+  and sends sample results back to Master.
+end note
+
+WR -> MR: Event{SampleResult(samples)}
+MR -> MSvc: onSampleReceived(workerId, samples)
+MSvc -> MMgr: aggregateSamples()
+MMgr -> MSvc: computePercentiles()
+MSvc -> MR: sendNextRound(all workers, 1, percentiles)
+MR -> WR: Control{NextRound(roundId=1, percentiles)}
+note right of WR
+  Workers now partition data based on received percentiles.
+end note
+
+== Worker executes Round 1 ==
+MR -> MMgr: notify Worker#X connected
+WR -> WSvc: onNextRoundSignal(1)
+note right of WSvc
+  Worker receives NextRound signal from Master
+  and starts executing round 1.
+end note
+
+WSvc -> WMgr: executeRound(1)
+WMgr -> WMgr: localSort + partition + shuffle
+note over WMgr
+  Local sort and partition performed here.
+  Each partition is sent to target workers.
+end note
+
+... internal worker processing ...
+WMgr -> WSvc: reportRoundCompleteToMaster(1)
+WSvc -> WR: Event{RoundDone(roundId=1)}
+note right of WR
+  Worker reports round completion back to Master.
+end note
+
+== Master aggregates ==
+MR -> MSvc: onWorkerRoundDone(workerId, round=1)
+note right of MSvc
+  Master receives completion report
+  from Worker (RoundDone event).
+end note
+
+MSvc -> MMgr: markDone(workerId, round=1)
+MMgr -> MMgr: if all workers done for round 1
+MMgr -> MSvc: broadcastNextRound(2)
+note right of MMgr
+  Once all workers finish, Master triggers the next round.
+end note
+
+MSvc -> MR: sendNextRound(all workers, 2)
+MR -> WR: Control{NextRound(roundId=2)}
+note right of WR
+  Master instructs all workers to begin next round.
+end note
+
+== Heartbeat / Liveness ==
+loop every 5s
+  WR -> MR: Event{Heartbeat()}
+  MR -> MSvc: onHeartbeat(workerId)
+end
+note right of WR
+  Worker sends periodic heartbeat to maintain connection.
+end note
+note right of MSvc
+  Master updates last-seen time for each worker.
+end note
+
+== Dead Worker Detection ==
+MSvc -> MMgr: if no heartbeat > timeout or stream error
+note right of MSvc
+  Master detects worker failure (no heartbeat or stream closed).
+end note
+
+MMgr -> MSvc: broadcastDeadWorker(workerId)
+MSvc -> MR: sendDeadWorker(all workers, cause=timeout)
+MR -> WR: Control{DeadWorker(deadWorkerId)}
+note over W
+  Workers update local routing/retry policies
+  (stop sending to dead worker, redistribute data, etc.)
+end note
+
+== Stream Recovery ==
+... optional ...
+note over WR,MR
+  If connection drops, Worker reconnects
+  and re-sends Register to resume state.
+end note
+
+@enduml

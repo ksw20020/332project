@@ -33,15 +33,22 @@ register 통신 프로토콜 확정(handshake), 다이어그램 업데이트<br>
 shuffling 마스터-워커 통신 프로토콜 확정(스트리밍), 다이어그램 업데이트<br>
 shuffling 라운드 로빈 페어 매칭 알고리즘 확정<br>
 
+### Week 4 [link](https://github.com/ksw20020/332project/pull/4)
+jdk 등 개발환경 세팅, 프로젝트 추가 <br>
+클래스 다이어그램 작성
+ - 워커 모듈 설계[link](doc/module%20diagram/)
+ - 마스터 모듈 설계
+ - grpc Stream 방식 확정
+
+
 #### goal of next week
 | Member | Goal |
 | ---- | ---- |
-| 김성원 | gRPC 학습 및 통신 프로토콜 확정 | 
-| 진시완 | 정렬 알고리즘 및 중간 디렉터리 구조 결정 | 
-| 채동욱 | gRPC 학습 및 통신 프로토콜 확정 | 
+| 김성원 | 로컬 sorting 코드 구현 |
+| 진시완 | 샘플링 구현 |
+| 채동욱 | shuffling 중 worker-master 통신 부분 구현 |
 
 <br>
-
 <br>
 <br>
 <br>
@@ -49,7 +56,6 @@ shuffling 라운드 로빈 페어 매칭 알고리즘 확정<br>
 
 | Week | Goal |
 | ---- | ---- |
-| Week4 | falut tolerance 반영한 프로젝트 디자인 | 
 | Week5 | worker, master 프로그램 작성 | 
 | Week6 | worker, master 프로그램 작성 | 
 | Week7 | falut tolerance 고려해 테스트 및 디버깅 | 

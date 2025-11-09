@@ -36,9 +36,9 @@ shuffling 라운드 로빈 페어 매칭 알고리즘 확정<br>
 ### Week 4 [link](https://github.com/ksw20020/332project/pull/4)
 jdk 등 개발환경 세팅, 프로젝트 추가 <br>
 클래스 다이어그램 작성
- - 워커 모듈 설계[link](doc/module%20diagram/)
- - 마스터 모듈 설계
- - grpc Stream 방식 확정
+ - 워커 모듈 설계 [link](doc/module%20diagram/Worker/Worker_Module_Diagram.png)
+ - 마스터 모듈 설계 [link](doc/module%20diagram/Master/master.png)
+ - grpc Stream 방식 확정 [link](doc/module%20diagram/Worker/Control_stream.png)
 
 
 #### goal of next week

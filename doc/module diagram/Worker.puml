@@ -11,26 +11,32 @@ package Worker {
             + waitForNextRoundSignal()
         }
 
-        class PartitionManager {
-            + partition(path, percentiles)
-        }
-        
-        class SortPartitionTask {
+        class SortPartitionManager {
             - inputFilePath: String
             - partitionRanges: Array[PartitionRange]
             - tempDir: String
-            + execute()
-            --
-            + localSort()   // << Local Sorting Logic >>
-            + partitionRecords() // << Partitioning Logic >>
+            + sort()
+            + partition(path, percentiles)
         }
         
-        class Partitioner {
-            + getDestination(key, ranges): (Int, Int) // Binary Search
-        }
     }
 
     folder "Services" {
+        
+        class SortService {
+            + execute()
+            --
+            + localSort()
+        }
+
+        class PartitionService {
+            + partitionRecords()
+        }
+
+        class Partitioner {
+            + getDestination(key, ranges): (Int, Int)
+        }
+
         class ShuffleWorkerService {
             + executeRound(roundId)
             - openWorkerStream(targetWorkerId)
@@ -45,16 +51,19 @@ package Worker {
             - onNextRoundSignal()
 
             + start(ip, port)
-            + sendHeartbeat()
             - onDeadWorker(deadWorkerId: Int)
-        }
-
-        class PartitionService {
-            + partition(path, percentiles)
         }
     }
     
     folder "Repositories" {
+        interface GrpcRepository {
+            
+            - openServer()
+            - openClient()
+            - close()
+
+        }
+
         class GrpcShuffleRepository {
             StreamObserver activeStreamObserver
 
@@ -64,20 +73,28 @@ package Worker {
             + waitForMasterNextRound()
             + receiveNextRoundHandler(handler)
             
-            - openServer()
-            - openClient()
             - openStreamToMaster()
-            - close()
+            + onDeadWorkerHandler(handler)
+        }
+
+        class GrpcRegistrationRepository {
+            StreamObserver activeStreamObserver
+
+            - openStreamToMaster()
 
             + registerToMaster(ip: String, port: Int, version: String = "v1")
-            + sendHeartbeat()
-            + onDeadWorkerHandler(handler)
             + onStreamConnectedHandler(handler)
+        }
+
+        class GrpcSamplingRepository {
+            StreamObserver activeStreamObserver
+
+            ...
         }
             
         class FileStorageRepository {
-            + read(path, amount) : data // For reading input block
-            + save(path, data)        // For writing temp partition
+            + read(path, amount) : data
+            + save(path, data)
         }
     }
     
@@ -101,24 +118,11 @@ package Worker {
         }
 
         class Register   <<ProtoMsg>>
-        class NextRound  <<ProtoMsg>>
-        class RoundDone  <<ProtoMsg>>
-        class DeadWorker <<ProtoMsg>>
-        class Heartbeat  <<ProtoMsg>>
 
     }
 
     ' Relationships
-    MainWorker --> PartitionManager : Triggers Sort/Partition
-    PartitionManager --> SortPartitionTask : Manages thread pool & tasks
-    
-    SortPartitionTask ..> Partitioner : Uses to determine destination
-    SortPartitionTask ..> Record : Processes
-    SortPartitionTask ..> PartitionRange : Reads partition info
-    SortPartitionTask ..> FileStorageRepository : Reads input, Writes temp partitions
-
-    ShuffleMasterService ..> GrpcShuffleRepository : start()/registerToMaster()\nsendHeartbeat()/reportRoundCompleteToMaster()
-    GrpcShuffleRepository ..> ShuffleMasterService : receiveNextRoundHandler()\n onDeadWorkerHandler()
+    SortService ..> Partitioner : Uses to determine destination
     
     ' Model relationships
     Record o-- RecordKey
@@ -128,8 +132,6 @@ package Worker {
     MainWorker --> Managers
     Managers --> Services
     Services --> Repositories
-    Repositories --> Model
-
 
 }
 @enduml

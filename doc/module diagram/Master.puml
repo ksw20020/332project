@@ -6,6 +6,10 @@ package Master {
     }
 
     folder "Managers" {
+        class RegistrationManager {
+
+        }
+
         class ShuffleManager {
             + executeRounds(allRounds)
             + executeRound(roundId)
@@ -13,6 +17,14 @@ package Master {
     }
 
     folder "Services" {
+        class RegistrationService {
+
+        }
+
+        class SamplingService {
+
+        }
+
         class ShuffleWorkerService {
             + broadcastNextRound(newRound: Int)
             + broadcastDeadWorker(workerId: Int)
@@ -27,6 +39,25 @@ package Master {
     }
     
     folder "Repositories" {
+        
+        interface GrpcRepository {
+            
+            - openServer()
+            - close()
+
+        }
+
+        class GrpcRegistrationRepository {
+            + onRegisterHandler(handler)
+            + onStreamOpenedHandler(handler)
+
+        }
+
+        class GrpcSamplingRepository {
+            + sendSampleRequest(workerId: Int, sampleSize: Int)
+            + onSampleResponseHandler(handler)
+        }
+
         class GrpcShuffleRepository {
             Map<Int, StreamObserver> streamObservers
 
@@ -47,23 +78,14 @@ package Master {
     folder Model {
         object GrpcShuffleStream <<Proto>>
 
-        class NextRound <<ProtoMsg>>
-        class DeadWorker <<ProtoMsg>>
         class Register  <<ProtoMsg>>
-        class RoundDone <<ProtoMsg>>
-        class Heartbeat <<ProtoMsg>>
     }
 
     ' Relationships
     MainMaster --> Managers
     Managers --> Services
     Services --> Repositories
-    Repositories --> Model
-
-    GrpcShuffleRepository ..> ShuffleWorkerService : onRegisterHandler()\n onHeartbeatHandler()\n onWorkerRoundDoneHandler()
-    ShuffleWorkerService ..> GrpcShuffleRepository : sendNextRound()/sendDeadWorker()
-
-
+    
 }
 
 

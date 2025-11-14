@@ -1,5 +1,5 @@
 package master
 
 class commonutil {
-
+  
 }

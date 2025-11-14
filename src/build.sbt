@@ -1,19 +1,33 @@
-ThisBuild / version := "0.1.0-SNAPSHOT"
 
+ThisBuild / version := "0.1.0-SNAPSHOT"
 ThisBuild / scalaVersion := "3.3.7"
 
-lazy val common = project.in(file("common"))
-
-lazy val master = project
-  .in(file("master"))
-  .dependsOn(common)
+lazy val master = (project in file("master"))
   .settings(
-    mainClass := Some("master.MasterMain")
+    name := "master",
+    libraryDependencies ++= Seq(
+      "io.grpc" % "grpc-netty" % scalapb.compiler.Version.grpcJavaVersion,
+      "com.thesamet.scalapb" %% "scalapb-runtime-grpc" % scalapb.compiler.Version.scalapbVersion
+    ),
+    Compile / PB.targets := Seq(
+      scalapb.gen() -> (Compile / sourceManaged).value
+    ),
+    Compile / PB.protoSources += (ThisBuild / baseDirectory).value / "master" / "src" / "main" / "proto"
   )
 
-lazy val worker = project
-  .in(file("worker"))
-  .dependsOn(common)
+lazy val worker = (project in file("worker"))
   .settings(
-    mainClass := Some("worker.WorkerMain")
+    name := "worker",
+    libraryDependencies ++= Seq(
+      "io.grpc" % "grpc-netty" % scalapb.compiler.Version.grpcJavaVersion,
+      "com.thesamet.scalapb" %% "scalapb-runtime-grpc" % scalapb.compiler.Version.scalapbVersion
+    ),
+    Compile / PB.targets := Seq(
+      scalapb.gen() -> (Compile / sourceManaged).value
+    ),
+    Compile / PB.protoSources += (ThisBuild / baseDirectory).value / "worker" / "src" / "main" / "proto"
   )
+
+lazy val root = (project in file("."))
+  .aggregate(master, worker)
+

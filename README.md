@@ -39,14 +39,23 @@ jdk 등 개발환경 세팅, 프로젝트 추가 <br>
  - 워커 모듈 설계 [link](doc/module%20diagram/Worker/Worker_Module_Diagram.png)
  - 마스터 모듈 설계 [link](doc/module%20diagram/Master/master.png)
  - grpc Stream 방식 확정 [link](doc/module%20diagram/Worker/Control_stream.png)
+ - 
+### Week 5 [link](https://github.com/ksw20020/332project/pull/5)
+코드 작성 시작
+ - 마스터 - 워커 간 통신 하위 모듈 구현
+   - 샘플링, 셔플링 시 조율 부분
+ - 단일 파일 정렬 구현
+   - Partitioning을 고려한 파일 입출력 구현 중
+ - 마스터 내부 샘플링 구현
+ - 셔플링 내부 fault tolerance용 인터페이스 구현
 
 
 #### goal of next week
 | Member | Goal |
 | ---- | ---- |
-| 김성원 | 로컬 sorting 코드 구현 |
-| 진시완 | 샘플링 구현 |
-| 채동욱 | shuffling 중 worker-master 통신 부분 구현 |
+| 김성원 | Partitioning, k-way merge sort 구현 |
+| 진시완 | Registration 구현 |
+| 채동욱 | shuffling 중 worker-worker 통신 부분 구현 |
 
 <br>
 <br>
@@ -56,7 +65,6 @@ jdk 등 개발환경 세팅, 프로젝트 추가 <br>
 
 | Week | Goal |
 | ---- | ---- |
-| Week5 | worker, master 프로그램 작성 | 
 | Week6 | worker, master 프로그램 작성 | 
-| Week7 | falut tolerance 고려해 테스트 및 디버깅 | 
-| Week8 | 디버깅 | 
+| Week7 | 코드 통합, 테스트 및 디버깅 | 
+| Week8 | falut tolerance 고려해 테스트 및 디버깅 | 

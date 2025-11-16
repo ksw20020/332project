@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package shuffle.control;
+
+message RoundStart {
+    int32 round = 1;
+}
+
+message RoundDone {
+    int32 round = 1;
+    int32 worker_id = 2;
+}
+
+message ShuffleMsg {
+    oneof payload {
+        RoundStart start = 1;
+        RoundDone done = 2;
+    }
+}
+
+service ShuffleControlService {
+    rpc GrpcShuffleStreamControl(stream ShuffleMsg) returns (stream ShuffleMsg);
+}
+
+message SampleRequest {
+    int32 worker_id = 1;
+    repeated bytes samples = 2;
+}
+
+message SampleAck {
+    bool ok = 1;
+}
+
+message PartitionInfo {
+    repeated bytes pivots = 1;
+}
+
+service SamplingService {
+    rpc SendSample(SampleRequest) returns (SampleAck);
+    rpc GetPartitionInfo(google.protobuf.Empty) returns (PartitionInfo);
+}

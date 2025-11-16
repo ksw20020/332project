@@ -1,8 +1,7 @@
 package managers
 
-import services.ShuffleMasterService
-
-import scala.concurrent.*
+import repositories.{GrpcShuffleMasterRepository, SamplingRepository}
+import services.{ShuffleMasterService, ShuffleWorkerService}
 import scala.concurrent.ExecutionContext.Implicits.global
 
 class ShuffleManager(
@@ -15,7 +14,9 @@ class ShuffleManager(
     onStartRound = executeRound,
   )
 
-  private val workerService = ???
+  private val samplingRepository = new SamplingRepository(channel)
+  private val sampler            = new Sampler()
+  private val workerService = new ShuffleWorkerService(workerId, samplingRepository, sampler)
 
   def startShuffle(): Unit = {
     masterService.reportRoundDoneToMaster(0)

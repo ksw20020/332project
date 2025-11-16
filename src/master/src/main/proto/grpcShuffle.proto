@@ -21,3 +21,21 @@ message ShuffleMsg {
 service ShuffleControlService {
     rpc GrpcShuffleStreamControl(stream ShuffleMsg) returns (stream ShuffleMsg);
 }
+
+message SampleRequest {
+    int32 worker_id = 1;
+    repeated bytes samples = 2;
+}
+
+message SampleAck {
+    bool ok = 1;
+}
+
+message PartitionInfo {
+    repeated bytes pivots = 1;
+}
+
+service SamplingService {
+    rpc SendSample(SampleRequest) returns (SampleAck);
+    rpc GetPartitionInfo(google.protobuf.Empty) returns (PartitionInfo);
+}

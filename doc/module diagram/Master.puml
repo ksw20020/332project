@@ -11,8 +11,8 @@ package Master {
         }
 
         class ShuffleManager {
-            + executeRounds(allRounds)
-            + executeRound(roundId)
+            + shuffle
+            + shuffleForDeadWorker
         }
     }
 
@@ -26,14 +26,14 @@ package Master {
         }
 
         class ShuffleWorkerService {
-            + broadcastNextRound(newRound: Int)
-            + broadcastDeadWorker(workerId: Int)
+            - broadcastNextRound(newRound: Int)
+            - broadcastNextRoundForDeadWorker(newRound: Int)
 
             - onWorkerRoundDone(workerId: Int)
             - onWorkerDead(workerId: Int)
 
-            - onWorkerRegister(workerId: Int, ip: String, port: Int)
-            - onHeartbeat(workerId: Int)
+            - executeRound(roundId: Int)
+            - executeRoundForDeadWorker(roundId: Int)
             + start()
         }
     }
@@ -60,18 +60,15 @@ package Master {
 
         class GrpcShuffleRepository {
             Map<Int, StreamObserver> streamObservers
+            override StreamObserver
 
+            + broadcastNextRound(workerId: Int, round: Int)
             + sendNextRound(workerId: Int, round: Int)
-            + sendDeadWorker(workerId: Int, round: Int = 0)
             + onWorkerRoundDoneHandler(handler)
             + onWorkerDeadHandler(handler)
 
-            - openServer()
-            - close()
-
-            + onRegisterHandler(handler)
-            + onHeartbeatHandler(handler)
-            + onStreamOpenedHandler(handler)
+            - registerWorkerStream(workerId: Int, stream: StreamObserver)
+            - findWorkerId(stream: StreamObserver): Int
         }
     }
     

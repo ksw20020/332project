@@ -5,10 +5,11 @@ package Worker {
 
     folder "Managers" {
         class ShuffleManager {
-            + executeRounds(allRounds)
+            - masterService : ShuffleMasterService
+            - workerService : ShuffleWorkerService
+            
             + executeRound(roundId)
-            + reportDoneToMaster(roundId)
-            + waitForNextRoundSignal()
+            + startShuffle()
         }
 
         class SortPartitionManager {
@@ -45,13 +46,8 @@ package Worker {
         }
 
         class ShuffleMasterService {
-            + reportRoundCompleteToMaster(roundId)
-            + waitForMasterNextRound() : RoundId
-            - openMasterStream()
-            - onNextRoundSignal()
-
-            + start(ip, port)
-            - onDeadWorker(deadWorkerId: Int)
+            + reportRoundDoneToMaster(roundId)
+            + onStartRound: (int) -> Unit
         }
     }
     
@@ -64,17 +60,23 @@ package Worker {
 
         }
 
-        class GrpcShuffleRepository {
-            StreamObserver activeStreamObserver
+        class GrpcShuffleMasterRepository {
+            ServiceStub stub
+            StreamObserver responseObserver
+
+            + sendRoundDone(roundId)
+            + receiveNextRoundHandler(handler)
+        }
+        
+        class GrpcShuffleWorkerRepository {
+            ServiceStub stub
+            StreamObserver responseObserver
 
             + sendChunk(chunk)
             + receiveChunkHandler(handler)
-            + reportRoundCompleteToMaster(roundId)
-            + waitForMasterNextRound()
-            + receiveNextRoundHandler(handler)
-            
-            - openStreamToMaster()
-            + onDeadWorkerHandler(handler)
+
+            + openServer()
+            + close()
         }
 
         class GrpcRegistrationRepository {

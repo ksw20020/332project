@@ -3,7 +3,7 @@ package repositories
 import io.grpc.stub.StreamObserver
 import shuffle.control.grpcShuffle._
 
-class GrpcShuffleRepository(
+class GrpcShuffleMasterRepository(
                              channel: io.grpc.ManagedChannel,
                              workerId: Int,
                              onStartRound: Int => Unit,

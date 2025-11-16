@@ -21,10 +21,6 @@ class ShuffleManager(
     masterService.reportRoundDoneToMaster(0)
   }
 
-  def startShuffleForDeadWorker(deadWorkerId: Int): Unit = {
-    masterService.reportRoundDoneToMaster(0)
-  }
-
   private def executeRound(roundId: Int): Unit = {
     workerService.executeRound(roundId).foreach {
       masterService.reportRoundDoneToMaster(roundId)

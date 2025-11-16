@@ -1,13 +1,13 @@
 package services
 
-import repositories.GrpcShuffleRepository
+import repositories.GrpcShuffleMasterRepository
 
 class ShuffleMasterService(
                             channel: io.grpc.ManagedChannel,
                             workerId: Int,
                             onStartRound: Int => Unit,
                           ) {
-  private val repository = new GrpcShuffleRepository(
+  private val repository = new GrpcShuffleMasterRepository(
     channel = channel,
     workerId = workerId,
     onStartRound = onStartRound,

@@ -26,25 +26,18 @@ class ShuffleWorkerService(
 
   /** Round 1: 샘플링 라운드 */
   private def runSamplingRound(): Future[Unit] = {
-    // 1) 로컬 데이터 로드 + 정렬 (블로킹 I/O일 수 있으니 Future에 감싼다)
-    val sampleBytesF: Future[Seq[ByteString]] =
-      Future {
-        val localData: Seq[Array[Byte]] = loadLocalData()
-        val sorted: Seq[Array[Byte]]   = sortLocalData(sorted = localData)
+    Future {
+      val local = loadLocalData()
+      val sorted = sortLocalData(local)
 
-        // 2) Sampler로 일부 샘플 추출
-        val sampled: Seq[Array[Byte]] =
-          sampler.sample(sorted, sampleCount = 20)
+      val keysOnly = sorted.map(_.take(10))   // 앞 10바이트가 key라 가정
+      val samples = sampler.stratifiedSample(keysOnly)
 
-        // 3) ByteString 으로 변환
-        sampled.map(ByteString.copyFrom)
-      }
-
-    // 4) Master에 샘플 전송
-    sampleBytesF.flatMap { sampleBytes =>
-      samplingRepo.sendSample(workerId, sampleBytes)
-    }
+      val byteStrings = samples.map(s => ByteString.copyFrom(s))
+      samplingRepo.sendSample(workerId, byteStrings)
+    }.flatten
   }
+
 
   /** Round 2: pivot 정보를 받아 파티션/셔플 수행 */
   private def runPartitionRound(): Future[Unit] = {

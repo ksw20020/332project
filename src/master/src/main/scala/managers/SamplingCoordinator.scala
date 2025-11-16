@@ -1,27 +1,32 @@
 package managers
 
+import com.google.protobuf.ByteString
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Sorting
 
+/** STS 기반 pivot 계산 */
 class SamplingCoordinator(workerCount: Int) {
 
-  private val collectedSamples = ArrayBuffer[(Int, Array[Byte])]()
+  private val allSamples = ArrayBuffer[ByteString]()
 
-  // Worker로부터 샘플을 수집
-  def addSample(workerId: Int, samples: Seq[Array[Byte]]): Unit = {
-    samples.foreach(s => collectedSamples.append((workerId, s)))
+  def addSample(workerId: Int, samples: Seq[ByteString]): Unit = {
+    allSamples ++= samples
   }
 
-  // 모든 샘플 수집 후 파티션 결정
-  def computePivots(): Seq[Array[Byte]] = {
-    val onlyKeys = collectedSamples.map(_._2).toArray
+  /** 전체 strata 샘플을 정렬한 뒤 pivot 계산 */
+  def computePivots(): Seq[ByteString] = {
+    if (allSamples.isEmpty) return Seq.empty
 
-    // 전체 샘플 정렬
-    Sorting.quickSort(onlyKeys)(Ordering.by(new String(_)))
+    implicit val ordering: Ordering[ByteString] =
+      Ordering.by(_.toByteArray.toIndexedSeq)
 
-    val pivotCount = workerCount - 1
-    val step = onlyKeys.length / workerCount
+    val arr = allSamples.toArray
+    Sorting.quickSort(arr)
 
-    (1 to pivotCount).map(i => onlyKeys(i * step))
+    // workerCount-1 개의 pivot 필요
+    val pivotsNeeded = workerCount - 1
+    val stride = arr.length / workerCount
+
+    (1 to pivotsNeeded).map(i => arr(math.min(i * stride, arr.length - 1)))
   }
 }

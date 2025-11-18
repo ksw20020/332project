@@ -1,17 +1,23 @@
 package managers
 
 import repositories.GrpcShuffleMasterRepository
-import services.{ShuffleMasterService, SamplingService}
+import services.{SamplingService, ShuffleMasterService, ShuffleWorkerService}
+
 import scala.concurrent.ExecutionContext.Implicits.global
 
 class ShuffleManager(
                       channel: io.grpc.ManagedChannel,
-                      workerId: Int
+                      workerId: Int,
+                      port: Int
                     ) {
   private val masterService = ShuffleMasterService(
     channel = channel,
     workerId = workerId,
     onStartRound = executeRound,
+  )
+  private val workerService = ShuffleWorkerService(
+    workerId = workerId,
+    port = port,
   )
 
   def startShuffle(): Unit = {
@@ -19,7 +25,7 @@ class ShuffleManager(
   }
 
   private def executeRound(roundId: Int): Unit = {
-    workerService.executeRound(roundId).foreach {
+    workerService.executeRound(roundId).foreach { _ =>
       masterService.reportRoundDoneToMaster(roundId)
     }
   }

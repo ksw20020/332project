@@ -2,19 +2,20 @@ package services
 
 import repositories.GrpcShuffleWorkerRepository
 import repositories.WorkerRole
+import repositories.DiskFileStorageRepository
 import shuffle.control.grpcShuffle.RecordBatch
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
 class ShuffleWorkerService(workerId: Int, port: Int) {
-  val fileRepository = FileStorageRepository()
+  val fileRepository = DiskFileStorageRepository()
   val grpcRepository = GrpcShuffleWorkerRepository(
     onReceiveBatch = ???,
     onReceiveReady = ???
   )
 
-  def executeRound(roundId: Int): Unit = {
+  def executeRound(roundId: Int): Future[Unit] = {
     val (a, b) = roundRobinPairs(roundId)
       .find { case (x, y) => x == workerId || y == workerId }
       .get

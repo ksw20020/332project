@@ -5,7 +5,7 @@ import io.grpc.stub.StreamObserver
 import shuffle.control.grpcShuffle.*
 
 import java.util.concurrent.atomic.AtomicBoolean
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 
 sealed trait WorkerRole
 object WorkerRole {
@@ -20,37 +20,42 @@ class GrpcShuffleWorkerRepository(
 
   @volatile private var clientStream: StreamObserver[ExchangeMsg] = _
   @volatile private var serverStream: StreamObserver[ExchangeMsg] = _
+  @volatile private var server: io.grpc.Server = _
   private val getFirstRequest: AtomicBoolean = AtomicBoolean(false)
+  private val isSendingDone: AtomicBoolean = AtomicBoolean(false)
 
   /** server or client */
-  def start(role: WorkerRole, port: Int, host: String): Unit = {
+  def start(role: WorkerRole, port: Int, host: String): Future[Unit] = {
+    val p = Promise[Unit]
     clientStream = null
     serverStream = null
     getFirstRequest.set(false)
+    isSendingDone.set(false)
     role match {
       case WorkerRole.Server =>
-        startServer(port)
+        startServer(port, p)
 
       case WorkerRole.Client =>
-        connectToPeer(host, port)
+        connectToPeer(host, port, p)
     }
+    p.future
   }
 
   /**
    * Start gRPC server
    */
-  private def startServer(port: Int): Unit = {
+  private def startServer(port: Int, promise: Promise[Unit]): Unit = {
     val serviceImpl = new WorkerExchangerGrpc.WorkerExchanger {
       override def exchange(
                              responseObserver: StreamObserver[ExchangeMsg]
                            ): StreamObserver[ExchangeMsg] = {
 
         serverStream = responseObserver
-        createExchangeStream(isInboundFromClient = true)
+        createExchangeStream(promise)
       }
     }
 
-    ServerBuilder
+    server = ServerBuilder
       .forPort(port)
       .addService(WorkerExchangerGrpc.bindService(serviceImpl, ec))
       .build()
@@ -62,7 +67,7 @@ class GrpcShuffleWorkerRepository(
   /**
    * Connect to peer worker (client mode)
    */
-  private def connectToPeer(peerHost: String, peerPort: Int): Unit = {
+  private def connectToPeer(peerHost: String, peerPort: Int, promise: Promise[Unit]): Unit = {
     val channel = ManagedChannelBuilder
       .forAddress(peerHost, peerPort)
       .usePlaintext()
@@ -70,7 +75,7 @@ class GrpcShuffleWorkerRepository(
 
     val stub = WorkerExchangerGrpc.stub(channel)
 
-    clientStream = stub.exchange(createExchangeStream(isInboundFromClient = false))
+    clientStream = stub.exchange(createExchangeStream(promise))
 
     println(s"[WorkerNode] Connected to peer $peerHost:$peerPort")
     sendReady()
@@ -79,7 +84,7 @@ class GrpcShuffleWorkerRepository(
   /**
    * Unified stream handler (server ↔ client identical logic)
    */
-  private def createExchangeStream(isInboundFromClient: Boolean)
+  private def createExchangeStream(promise: Promise[Unit])
   : StreamObserver[ExchangeMsg] = {
 
     new StreamObserver[ExchangeMsg] {
@@ -90,6 +95,9 @@ class GrpcShuffleWorkerRepository(
 
         case ExchangeMsg.Msg.Ready(ready) =>
           handleReady()
+
+        case ExchangeMsg.Msg.Done(done) => 
+          handleDone()
       }
 
       override def onError(t: Throwable): Unit = {
@@ -99,6 +107,7 @@ class GrpcShuffleWorkerRepository(
       override def onCompleted(): Unit = {
         println("[Stream] Completed")
         sendComplete()
+        promise.trySuccess(())
       }
     }
   }
@@ -116,13 +125,26 @@ class GrpcShuffleWorkerRepository(
     }
     val f = onReceiveReady()
     
-    f.onComplete { _ => sendBatch(_)}
+    f.foreach { rb =>
+      if (rb.records.nonEmpty) {
+        sendBatch(rb)
+      } else {
+        isSendingDone.set(true)
+        sendDone()
+      }
+    }
+  }
+  
+  private def handleDone(): Unit = {
+    if (isSendingDone.get()) {
+      sendComplete()
+    }
   }
 
   /** Send READY message */
   private def sendReady(): Unit = {
     val ready = ExchangeMsg(
-      ExchangeMsg.Msg.Ready(Ready.defaultInstance)
+      ExchangeMsg.Msg.Ready(Ready(ok = true))
     )
 
     sendMessage(ready)
@@ -135,14 +157,30 @@ class GrpcShuffleWorkerRepository(
     )
     sendMessage(msg)
   }
+  
+  private def sendDone(): Unit = {
+    val ready = ExchangeMsg(
+      ExchangeMsg.Msg.Done(Done(done = true))
+    )
+
+    sendMessage(ready)
+  }
 
   private def sendComplete(): Unit = {
     if (clientStream != null) clientStream.onCompleted()
     if (serverStream != null) serverStream.onCompleted()
+    shutdown()
+    clientStream = null
+    serverStream = null
   }
 
   private def sendMessage(msg: ExchangeMsg): Unit = {
     if (clientStream != null) clientStream.onNext(msg)
     if (serverStream != null) serverStream.onNext(msg)
+  }
+  
+  private def shutdown(): Unit = {
+    if (serverStream != null && server != null)
+      server.shutdown()
   }
 }

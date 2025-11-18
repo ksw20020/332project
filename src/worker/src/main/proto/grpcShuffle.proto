@@ -28,6 +28,7 @@ message ExchangeMsg {
     oneof msg {
         RecordBatch batch = 1;
         Ready ready = 2;
+        Done done = 3;
     }
 }
 
@@ -37,6 +38,10 @@ message RecordBatch {
 
 message Ready {
     bool ok = 1;
+}
+
+message Done {
+    bool done = 1;
 }
 
 service WorkerExchanger {

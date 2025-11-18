@@ -1,7 +1,6 @@
 package services
 
-import managers.SamplingCoordinator
-import shuffle.control.grpcShuffle._
+import sampling.grpcSampling._
 import com.google.protobuf.empty.Empty
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -24,7 +23,7 @@ class SamplingService(
   }
 
   /** 지금까지 모은 샘플로 피벗 계산 후 Worker에게 전달 */
-  override def getPartitionInfo(req: Empty): Future[PartitionInfo] = {
+  override def getPartitionInfo(req: GetPartitionRequest): Future[PartitionInfo] = {
     val pivots = coordinator.computePivots()
     Future.successful(PartitionInfo(pivots = pivots))
   }

@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package sampling;
+
+message SampleRequest {
+    int32 worker_id = 1;
+    repeated bytes samples = 2;
+}
+
+message SampleAck {
+    bool ok = 1;
+}
+
+message GetPartitionRequest {
+
+}
+
+message PartitionInfo {
+    repeated bytes pivots = 1;
+}
+
+service SamplingService {
+    rpc SendSample(SampleRequest) returns (SampleAck);
+    rpc GetPartitionInfo(GetPartitionRequest) returns (PartitionInfo);
+}

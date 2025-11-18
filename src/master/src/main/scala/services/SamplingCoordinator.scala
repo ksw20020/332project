@@ -1,7 +1,9 @@
-package managers
+package services
 
 import com.google.protobuf.ByteString
+
 import scala.collection.mutable.ArrayBuffer
+import scala.math.Ordering.Implicits.seqOrdering
 import scala.util.Sorting
 
 /** STS 기반 pivot 계산 */

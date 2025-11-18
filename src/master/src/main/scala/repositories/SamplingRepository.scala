@@ -1,9 +1,8 @@
 package repositories
 
 import io.grpc.ManagedChannel
-import shuffle.control.grpcShuffle._
+import sampling.grpcSampling._
 import com.google.protobuf.ByteString
-import com.google.protobuf.empty.Empty
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -25,6 +24,6 @@ class SamplingRepository(
 
   /** Master가 계산한 pivot(PartitionInfo)을 가져오는 함수 */
   def fetchPartitionInfo(): Future[Seq[ByteString]] = {
-    stub.getPartitionInfo(Empty()).map(_.pivots)
+    stub.getPartitionInfo(GetPartitionRequest()).map(_.pivots)
   }
 }

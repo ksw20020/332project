@@ -1,6 +1,7 @@
-package managers
+package services
 
 import com.google.protobuf.ByteString
+
 import scala.util.Random
 
 /** STS: 정렬 후 strata 기반 층화 추출 */

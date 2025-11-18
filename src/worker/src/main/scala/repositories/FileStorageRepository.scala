@@ -1,86 +1,91 @@
 package repositories
 
 import java.io._
-import java.nio.file.{Files, Paths}
-import scala.util.Try
+import scala.util.Using
 
-/**
- * Repository, which is responsible for storing and reading data to and from the file system. Used to handle intermediate or final output files in distributed sorting operations.
- */
-class FileStorageRepository {
+// 이전에 정의된 Record 클래스 (100바이트 레코드)
+case class Record(bytes: Array[Byte]) {
+  require(bytes.length == 100)
+}
 
-    /**
-     * Reads data by the specified size (bytes) from the specified path.
-     * If you read the entire file, you can set amount to -1.
-     *
-     * @param path 읽을 파일의 경로 (String)
-     * @param amount 읽을 데이터의 크기 (Int). -1이면 파일 전체를 읽습니다.
-     * @return 읽은 데이터 (Array[Byte])
-     */
-    def read(path: String, amount: Int): Try[Array[Byte]] = Try {
-        val file = new File(path)
-        if (!file.exists() || !file.isFile) {
-            throw new FileNotFoundException(s"File not found or is not a file: $path")
-        }
+// FileStorageRepository 인터페이스 정의
+trait FileStorageRepository {
+  /**
+    * 주어진 경로의 입력 블록 파일을 읽어 100바이트 단위의 Record 목록을 반환합니다.
+    * @param path 입력 파일 경로
+    * @return Record 객체의 목록
+    */
+  def readBlock(path: String): List[Record]
 
-        val fileLength = file.length()
-        val bytesToRead = if (amount == -1 || amount > fileLength) fileLength.toInt else amount
+  /**
+    * 주어진 데이터를 파일에 씁니다. PartitionService에서 임시 파일 쓰기에 사용됩니다.
+    * @param path 저장할 파일 경로
+    * @param recordBytes 100바이트 레코드의 Array[Byte]
+    * @param append 기존 파일에 이어쓸지 여부 (Partitioning 시에는 true)
+    */
+  def saveRecord(path: String, recordBytes: Array[Byte], append: Boolean): Unit
 
-        val buffer = new Array[Byte](bytesToRead)
-        
-        // Try-with-resources 패턴을 위한 Loan Pattern
-        var fis: FileInputStream = null
-        try {
-            fis = new FileInputStream(file)
-            val bytesRead = fis.read(buffer, 0, bytesToRead)
-            
-            // Return only the correct reading, as the actual number of bytes read may differ from the number of bytes requested
-            if (bytesRead == bytesToRead) {
-                buffer
-            } else if (bytesRead > 0) {
-                // EOF 도달 등으로 인해 요청한 양보다 적게 읽었을 경우
-                java.util.Arrays.copyOfRange(buffer, 0, bytesRead)
-            } else {
-                // 읽은 데이터가 없을 경우 (파일 크기가 0이거나)
-                Array.empty[Byte]
-            }
-        } finally {
-            if (fis != null) fis.close()
-        }
+  /**
+    * 주어진 경로의 파일을 삭제합니다 (예: 임시 파일 정리 시).
+    * @param path 삭제할 파일 경로
+    * @return 성공 여부
+    */
+  def deleteFile(path: String): Boolean
+}
+
+// FileStorageRepository
+class DiskFileStorageRepository extends FileStorageRepository {
+
+  private val RECORD_SIZE = 100 // 100 바이트
+
+  /**
+    * 파일 읽기 구현
+    */
+  override def readBlock(path: String): List[Record] = {
+    val file = new File(path)
+    if (!file.exists() || file.length() == 0) return List.empty
+
+    // 파일 크기가 100바이트의 배수인지 확인하는 로직 추가
+    if (file.length() % RECORD_SIZE != 0) {
+      throw new IOException(s"File size (${file.length()} bytes) is not a multiple of record size ($RECORD_SIZE bytes).")
     }
 
-    /**
-     * 주어진 데이터를 지정된 경로에 저장합니다.
-     *
-     * @param path 데이터를 저장할 파일의 경로 (String)
-     * @param data 저장할 데이터 (Array[Byte])
-     */
-    def save(path: String, data: Array[Byte]): Try[Unit] = Try {
-        val file = new File(path)
-        
-        // 부모 디렉토리가 존재하지 않으면 생성
-        Option(file.getParentFile).foreach { parent =>
-            if (!parent.exists()) {
-                Files.createDirectories(Paths.get(parent.getAbsolutePath))
-            }
-        }
+    // Using 블록을 사용해 자원을 안전하게 닫습니다 (try-with-resources와 유사)
+    Using(new FileInputStream(file)) { fis =>
+      val records = scala.collection.mutable.ListBuffer[Record]()
+      var bytesRead: Int = 0
+      val buffer = new Array[Byte](RECORD_SIZE)
 
-        // 데이터 저장
-        var fos: FileOutputStream = null
-        try {
-            fos = new FileOutputStream(file)
-            fos.write(data)
-        } finally {
-            if (fos != null) fos.close()
+      while ({ bytesRead = fis.read(buffer); bytesRead != -1 }) {
+        if (bytesRead == RECORD_SIZE) {
+          // 배열 복사본을 만들어 Record 객체를 생성합니다.
+          records += Record(buffer.clone()) 
+        } else if (bytesRead > 0) {
+          // 파일 끝에서 100바이트 미만의 데이터가 남은 경우 - 오류 발생생
+          throw new IOException(s"Incomplete record found. Read $bytesRead bytes instead of $RECORD_SIZE.")
         }
-    }
+      }
+      records.toList
+    }.getOrElse(throw new IOException(s"Failed to read data from file: $path"))
+  }
 
-    /**
-     * 파일이 존재하는지 확인합니다.
-     * @param path 확인할 파일의 경로 (String)
-     * @return 파일 존재 여부 (Boolean)
-     */
-    def exists(path: String): Boolean = {
-        Files.exists(Paths.get(path))
+  /**
+    * 레코드 쓰기 구현 (PartitionService에서 호출됨)
+    */
+  override def saveRecord(path: String, recordBytes: Array[Byte], append: Boolean): Unit = {
+    require(recordBytes.length == RECORD_SIZE, s"Data must be exactly $RECORD_SIZE bytes.")
+
+    Using(new FileOutputStream(path, append)) { fos =>
+      fos.write(recordBytes)
+    }.getOrElse(throw new IOException(s"Failed to write data to file: $path"))
+  }
+  
+  override def deleteFile(path: String): Boolean = {
+    val file = new File(path)
+    if (file.exists()) {
+      file.delete()
+    } else {
+      true 
     }
+  }
 }

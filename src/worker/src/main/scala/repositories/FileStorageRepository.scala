@@ -2,11 +2,8 @@ package repositories
 
 import java.io._
 import scala.util.Using
+import models.Record
 
-// 이전에 정의된 Record 클래스 (100바이트 레코드)
-case class Record(bytes: Array[Byte]) {
-  require(bytes.length == 100)
-}
 
 // FileStorageRepository 인터페이스 정의
 trait FileStorageRepository {

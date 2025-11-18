@@ -15,7 +15,7 @@ trait FileStorageRepository {
     * @param path 입력 파일 경로
     * @return Record 객체의 목록
     */
-  def readBlock(path: String): List[Record]
+  def readBlock(path: String, offset: Long, length: Long): List[Record]
 
   /**
     * 주어진 데이터를 파일에 씁니다. PartitionService에서 임시 파일 쓰기에 사용됩니다.
@@ -41,34 +41,37 @@ class DiskFileStorageRepository extends FileStorageRepository {
   /**
     * 파일 읽기 구현
     */
-  override def readBlock(path: String): List[Record] = {
-    val file = new File(path)
-    if (!file.exists() || file.length() == 0) return List.empty
+  override def readBlock(path: String, offset: Long, length: Long): List[Record] = {
+    require(offset >= 0, "Offset must be non-negative.")
+    require(length >= 0 && length % RECORD_SIZE == 0, "Length must be non-negative and a multiple of 100 bytes.")
 
-    // 파일 크기가 100바이트의 배수인지 확인하는 로직 추가
-    if (file.length() % RECORD_SIZE != 0) {
-      throw new IOException(s"File size (${file.length()} bytes) is not a multiple of record size ($RECORD_SIZE bytes).")
-    }
+    val recordsToRead = (length / RECORD_SIZE).toInt
+    val records = scala.collection.mutable.ListBuffer[Record]()
 
-    // Using 블록을 사용해 자원을 안전하게 닫습니다 (try-with-resources와 유사)
-    Using(new FileInputStream(file)) { fis =>
-      val records = scala.collection.mutable.ListBuffer[Record]()
-      var bytesRead: Int = 0
-      val buffer = new Array[Byte](RECORD_SIZE)
-
-      while ({ bytesRead = fis.read(buffer); bytesRead != -1 }) {
+    // RandomAccessFile을 사용해 파일 내 특정 위치로 이동합니다.
+    Using(new RandomAccessFile(path, "r")) { raf =>
+      // 1. 오프셋으로 이동
+      raf.seek(offset) 
+      
+      // 2. 레코드 단위로 데이터 읽기
+      for (_ <- 0 until recordsToRead) {
+        val buffer = new Array[Byte](RECORD_SIZE)
+        val bytesRead = raf.read(buffer)
+        
         if (bytesRead == RECORD_SIZE) {
-          // 배열 복사본을 만들어 Record 객체를 생성합니다.
-          records += Record(buffer.clone()) 
-        } else if (bytesRead > 0) {
-          // 파일 끝에서 100바이트 미만의 데이터가 남은 경우 - 오류 발생생
-          throw new IOException(s"Incomplete record found. Read $bytesRead bytes instead of $RECORD_SIZE.")
+          records += Record(buffer.clone())
+        } else if (bytesRead == -1) {
+          // 파일 끝에 도달 (예상보다 일찍)
+          println(s"Warning: Reached EOF earlier than expected at offset $offset.")
+          return records.toList
+        } else {
+          throw new IOException(s"Incomplete record read: $bytesRead bytes instead of $RECORD_SIZE.")
         }
       }
       records.toList
-    }.getOrElse(throw new IOException(s"Failed to read data from file: $path"))
-  }
 
+    }.getOrElse(throw new IOException(s"Failed to read data from file: $path at offset $offset"))
+  }
   /**
     * 레코드 쓰기 구현 (PartitionService에서 호출됨)
     */

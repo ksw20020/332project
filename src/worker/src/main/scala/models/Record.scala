@@ -1,4 +1,4 @@
-package model
+package models
 
 case class Record(bytes: Array[Byte]) {
   

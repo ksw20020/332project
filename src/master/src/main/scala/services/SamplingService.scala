@@ -1,9 +1,13 @@
 package services
 
-import sampling.grpcSampling._
-import com.google.protobuf.empty.Empty
+import com.google.protobuf.ByteString
+import repositories.SamplingRepository
 
-import scala.concurrent.{ExecutionContext, Future}
+import java.util.Comparator
+import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.math.Ordering.Implicits.seqOrdering
+import scala.util.Sorting
 
 /** 샘플링 전용 gRPC 서비스 (Master 측).
   *
@@ -11,20 +15,77 @@ import scala.concurrent.{ExecutionContext, Future}
   *  - Worker ← Master : GetPartitionInfo()
   */
 class SamplingService(
-    coordinator: SamplingCoordinator
-)(implicit ec: ExecutionContext)
-    extends SamplingServiceGrpc.SamplingService {
+                       repository: SamplingRepository,
+                       workerCount: Int
+                     ) {
+  private val allSamples = ArrayBuffer[ByteString]()
+  private var receivedCount = 0
+  private val receivedFlags = new Array[Boolean](workerCount)
+  @volatile private var _pivots: Option[Seq[ByteString]] = None
 
-  /** Worker가 보낸 샘플을 Master가 수집 */
-  override def sendSample(req: SampleRequest): Future[SampleAck] = {
-    // req.samples: Seq[ByteString]
-    coordinator.addSample(req.workerId, req.samples)
-    Future.successful(SampleAck(ok = true))
+  def start(): Future[Unit] = {
+    val p = Promise[Unit]
+    repository.onWorkerRequest = onWorkerRequest
+    
+    p.future
   }
 
-  /** 지금까지 모은 샘플로 피벗 계산 후 Worker에게 전달 */
-  override def getPartitionInfo(req: GetPartitionRequest): Future[PartitionInfo] = {
-    val pivots = coordinator.computePivots()
-    Future.successful(PartitionInfo(pivots = pivots))
+  private def onWorkerRequest(workerId: Int, samples: Seq[ByteString]): Unit = {
+    if (_pivots.isDefined) {
+      sendPartitionInfo()
+      return
+    }
+
+    var shouldCompute = false
+
+    this.synchronized {
+      if (_pivots.isEmpty && !receivedFlags(workerId)) {
+        receivedFlags(workerId) = true
+        receivedCount += 1
+        allSamples ++= samples
+
+        if (receivedCount == workerCount) {
+          shouldCompute = true
+        }
+      }
+    }
+
+    if (shouldCompute) {
+      computePivots()
+    } else if (_pivots.isDefined) {
+      sendPartitionInfo()
+    }
   }
+
+  private def computePivots(): Unit = {
+    if (allSamples.isEmpty) return
+
+    implicit val ordering: Ordering[ByteString] = new Ordering[ByteString] {
+      val comparator: Comparator[ByteString] = ByteString.unsignedLexicographicalComparator()
+
+      override def compare(x: ByteString, y: ByteString): Int = comparator.compare(x, y)
+    }
+
+    val arr = allSamples.toArray
+    Sorting.quickSort(arr)
+
+    val pivotsNeeded = workerCount - 1
+
+    val data = (1 to pivotsNeeded).map { i =>
+      val index = (arr.length.toLong * i / workerCount).toInt
+      val safeIndex = math.max(0, math.min(index, arr.length - 1))
+
+      arr(safeIndex)
+    }
+    
+    if (_pivots.isEmpty) {
+      _pivots = Some(data)
+    }
+    sendPartitionInfo()
+  }
+
+  private def sendPartitionInfo(): Unit = {
+    repository.sendSamplingResult(_pivots.get)
+  }
+
 }

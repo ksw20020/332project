@@ -2,24 +2,22 @@ syntax = "proto3";
 
 package sampling;
 
-message SampleRequest {
+message SamplingRequest {
     int32 worker_id = 1;
     repeated bytes samples = 2;
 }
 
-message SampleAck {
-    bool ok = 1;
-}
-
-message GetPartitionRequest {
-
-}
-
-message PartitionInfo {
+message SamplingResult {
     repeated bytes pivots = 1;
 }
 
+message SamplingMsg {
+    oneof payload {
+        SamplingRequest request = 1;
+        SamplingResult result = 2;
+    }
+}
+
 service SamplingService {
-    rpc SendSample(SampleRequest) returns (SampleAck);
-    rpc GetPartitionInfo(GetPartitionRequest) returns (PartitionInfo);
+    rpc GrpcSampling(stream SamplingMsg) returns (stream SamplingMsg);
 }

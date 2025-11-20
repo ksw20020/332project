@@ -1,84 +1,111 @@
 package services
 
 import com.google.protobuf.ByteString
-import managers.Sampler
 import repositories.SamplingRepository
+import models.*
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.util.Random
+import java.io.{BufferedInputStream, File, FileInputStream, RandomAccessFile}
+import scala.collection.mutable.ArrayBuffer
 
-/** Worker에서 실제 라운드별 작업을 수행하는 서비스.
-  *
-  *  - Round 1: 로컬 데이터 정렬 + 샘플 추출 + Master로 전송
-  *  - Round 2: Master에서 pivot 받아서 파티션/셔플 (TODO)
-  */
 class SamplingService(
-    workerId: Int,
-    samplingRepo: SamplingRepository,
-    sampler: Sampler
-)(implicit ec: ExecutionContext) {
+                       filePath: String,
+                       channel: io.grpc.ManagedChannel,
+                       workerId: Int
+                     ) {
+  private val repository = SamplingRepository(
+    channel = channel,
+    workerId = workerId,
+    onReceiveResult = onReceiveResult
+  )
+  val p = Promise[Seq[PartitionRange]]
+  private val RECORD_SIZE = 100
 
-  /** ShuffleManager에서 roundId를 넘겨 호출하는 메인 엔트리 */
-  def executeRound(roundId: Int): Future[Unit] = roundId match {
-    case 1 => runSamplingRound()
-    case 2 => runPartitionRound()
-    case _ => Future.unit
+  def executeRound(): Future[Seq[PartitionRange]] = {
+    val samples = extractSamples(filePath, 500)
+    val keysOnly = samples.map(_.take(10))   // 앞 10바이트가 key
+
+    val records = samples.map(s => RecordKey(s))
+    repository.sendSamplingRequest(records)
+    p.future
   }
 
-  /** Round 1: 샘플링 라운드 */
-  private def runSamplingRound(): Future[Unit] = {
-    Future {
-      val local = loadLocalData()
-      val sorted = sortLocalData(local)
+  private def onReceiveResult(result: Seq[ByteString]): Unit = {
+    // Min Start (0x00 * 10 bytes)
+    val minStart = ByteString.copyFrom(new Array[Byte](10))
 
-      val keysOnly = sorted.map(_.take(10))   // 앞 10바이트가 key라 가정
-      val samples = sampler.stratifiedSample(keysOnly)
+    // Max End (0xFF * 10 bytes)
+    val maxEnd = ByteString.copyFrom(Array.fill[Byte](10)(-1))
 
-      val byteStrings = samples.map(s => ByteString.copyFrom(s))
-      samplingRepo.sendSample(workerId, byteStrings)
-    }.flatten
+    val allBoundaries = (minStart +: result) :+ maxEnd
+
+    val partitionRanges = allBoundaries.sliding(2).zipWithIndex.map {
+      case (Seq(start, end), index) =>
+        PartitionRange(
+          id = index,
+          startKey = RecordKey(start.toByteArray),
+          endKey = RecordKey(end.toByteArray),
+          destWorkerId = index
+        )
+    }.toSeq
+
+    p.trySuccess(partitionRanges)
   }
 
 
-  /** Round 2: pivot 정보를 받아 파티션/셔플 수행 */
-  private def runPartitionRound(): Future[Unit] = {
-    for {
-      pivots <- samplingRepo.fetchPartitionInfo()
-      _      <- Future {
-        applyPivotsAndShuffle(pivots)
+  private def extractSamples(filePath: String, sampleCount: Int): Seq[Array[Byte]] = {
+    val root = new File(filePath)
+
+    val files = if (root.isDirectory) {
+      root.listFiles().filter(_.isFile).sortBy(_.getName)
+    } else {
+      Array(root)
+    }
+
+    if (files == null || files.isEmpty) return Seq.empty
+
+    val samples = new ArrayBuffer[Array[Byte]](sampleCount)
+    var remaining = sampleCount
+
+    val iterator = files.iterator
+    while (remaining > 0 && iterator.hasNext) {
+      val file = iterator.next()
+      val bis = new BufferedInputStream(new FileInputStream(file))
+
+      try {
+        // 파일 끝에 도달하거나 필요한 만큼 다 모을 때까지 반복
+        while (remaining > 0) {
+          val buffer = new Array[Byte](RECORD_SIZE)
+
+          // 100바이트를 확실하게 읽기 위한 로직
+          // (read 메서드는 100보다 적게 읽을 수도 있으므로 루프 필요)
+          var bytesRead = 0
+          var eof = false
+          while (!eof && bytesRead < RECORD_SIZE) {
+            val n = bis.read(buffer, bytesRead, RECORD_SIZE - bytesRead)
+            if (n == -1) eof = true
+            else bytesRead += n
+          }
+
+          if (bytesRead == RECORD_SIZE) {
+            // 정상적으로 100바이트 읽음
+            samples += buffer
+            remaining -= 1
+          } else {
+            eof = true
+          }
+
+        }
+      } catch {
+        case exception: Exception =>
+          println(s"Error reading file: ${exception.getMessage}")
       }
-    } yield ()
-  }
+      finally {
+        if (bis != null) bis.close()
+      }
+    }
 
-  // -----------------------------
-  // 아래 함수들은 네 환경에 맞게 채워야 하는 부분
-  // -----------------------------
-
-  /** Gensort로 생성한 로컬 데이터를 읽어오는 부분
-    *   - 파일 경로, 포맷 등은 과제/환경에 맞게 구현
-    */
-  private def loadLocalData(): Seq[Array[Byte]] = {
-    // TODO: 로컬 입력 파일에서 레코드 읽어서 Seq[Array[Byte]] 로 반환
-    // 예: 각 레코드가 100바이트(키 10 + value 90)라면 그 단위로 잘라서 읽기
-    Seq.empty
-  }
-
-  /** 로컬 데이터 정렬 로직
-    *   - 기본 구현은 키를 String으로 보고 사전식 정렬
-    *   - 필요하면 훨씬 최적화된 비교 로직으로 교체 가능
-    */
-  private def sortLocalData(sorted: Seq[Array[Byte]]): Seq[Array[Byte]] = {
-    // TODO: 키 부분(예: 앞 10바이트)만 잘라서 비교하는 쪽으로 최적화 가능
-    sorted.sortBy(rec => new String(rec.take(10), "US-ASCII"))
-  }
-
-  /** Master에서 받은 pivots 기준으로
-    *   - 로컬 데이터를 여러 파티션으로 나누고
-    *   - 각 파티션을 대상 Worker에게 전송하는 로직
-    */
-  private def applyPivotsAndShuffle(pivots: Seq[ByteString]): Unit = {
-    // TODO:
-    //  1) loadLocalData() or 캐시된 로컬 정렬 데이터를 가져온다
-    //  2) pivots 기준으로 구간 나누기
-    //  3) 각 구간을 적절한 Worker에게 전송 (gRPC / 파일 등)
+    samples.toSeq
   }
 }

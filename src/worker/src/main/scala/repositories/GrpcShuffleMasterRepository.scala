@@ -32,6 +32,12 @@ class GrpcShuffleMasterRepository(
   private val requestObserver: StreamObserver[ShuffleMsg] =
     stub.grpcShuffleStreamControl(responseObserver)
 
+  def registerToMaster(ip: String, port: Int): Unit = {
+    val reg = Register(workerId = workerId, ip = ip, port = port)
+    val msg = ShuffleMsg(ShuffleMsg.Payload.Register(reg))
+    requestObserver.onNext(msg)
+  }
+
   def sendRoundDone(roundId: Int): Unit = {
     val msg = ShuffleMsg(
       payload = ShuffleMsg.Payload.Done(

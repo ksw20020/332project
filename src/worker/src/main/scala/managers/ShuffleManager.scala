@@ -9,7 +9,8 @@ class ShuffleManager(
                       channel: io.grpc.ManagedChannel,
                       workerId: Int,
                       port: Int,
-                      savePath: String
+                      savePath: String,
+                      workerCount: Int
                     ) {
   private val masterService = ShuffleMasterService(
     channel = channel,
@@ -19,7 +20,8 @@ class ShuffleManager(
   private val workerService = ShuffleWorkerService(
     workerId = workerId,
     port = port,
-    savePath = savePath
+    savePath = savePath,
+    workerCount = workerCount
   )
 
   def startShuffle(): Unit = {

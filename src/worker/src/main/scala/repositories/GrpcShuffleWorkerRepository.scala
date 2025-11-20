@@ -1,10 +1,12 @@
 package repositories
 
-import io.grpc.{ManagedChannelBuilder, ServerBuilder}
+import io.grpc.{ManagedChannelBuilder, ServerBuilder, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 import shuffle.control.grpcShuffle.*
 
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
 sealed trait WorkerRole
@@ -14,9 +16,9 @@ object WorkerRole {
 }
 
 class GrpcShuffleWorkerRepository(
-                  onReceiveBatch: (RecordBatch) => Future[Unit],
-                  onReceiveReady: () => Future[RecordBatch]
-                )(implicit ec: ExecutionContext) {
+                                   onReceiveBatch: RecordBatch => Future[Unit],
+                                   onReceiveReady: () => Future[RecordBatch]
+                                 )(implicit ec: ExecutionContext) {
 
   @volatile private var clientStream: StreamObserver[ExchangeMsg] = _
   @volatile private var serverStream: StreamObserver[ExchangeMsg] = _
@@ -54,10 +56,18 @@ class GrpcShuffleWorkerRepository(
         createExchangeStream(promise)
       }
     }
+    val serviceImpl2 = new HealthCheckServiceGrpc.HealthCheckService {
+      override def ping(request: HealthCheckRequest): Future[HealthCheckResponse] = {
+        Future {
+          HealthCheckResponse()
+        }
+      }
+    }
 
     server = ServerBuilder
       .forPort(port)
       .addService(WorkerExchangerGrpc.bindService(serviceImpl, ec))
+      .addService(HealthCheckServiceGrpc.bindService(serviceImpl2, ec))
       .build()
       .start()
 
@@ -74,10 +84,26 @@ class GrpcShuffleWorkerRepository(
       .build()
 
     val stub = WorkerExchangerGrpc.stub(channel)
-
-    clientStream = stub.exchange(createExchangeStream(promise))
+    val stubs = HealthCheckServiceGrpc.blockingStub(channel)
 
     println(s"[WorkerNode] Connected to peer $peerHost:$peerPort")
+    @tailrec
+    def retrySendReady(): Unit = {
+      try {
+        val blockingStub = HealthCheckServiceGrpc.blockingStub(channel)
+
+        blockingStub.ping(HealthCheckRequest())
+
+      } catch {
+        case e: StatusRuntimeException =>
+          println("retry")
+          Thread.sleep(1000)
+          retrySendReady()
+      }
+    }
+    retrySendReady()
+
+    clientStream = stub.exchange(createExchangeStream(promise))
     sendReady()
   }
 
@@ -96,7 +122,7 @@ class GrpcShuffleWorkerRepository(
         case ExchangeMsg.Msg.Ready(ready) =>
           handleReady()
 
-        case ExchangeMsg.Msg.Done(done) => 
+        case ExchangeMsg.Msg.Done(done) =>
           handleDone()
       }
 
@@ -107,6 +133,7 @@ class GrpcShuffleWorkerRepository(
       override def onCompleted(): Unit = {
         println("[Stream] Completed")
         sendComplete()
+        shutdown()
         promise.trySuccess(())
       }
     }
@@ -114,17 +141,19 @@ class GrpcShuffleWorkerRepository(
 
   /** Process RecordBatch */
   private def handleRecordBatch(rb: RecordBatch): Unit = {
+    println("get batch")
     val f = onReceiveBatch(rb)
 
     f.onComplete { _ => sendReady() }
   }
 
   private def handleReady(): Unit = {
+    println("get ready")
     if (!getFirstRequest.getAndSet(true)) {
       sendReady()
     }
     val f = onReceiveReady()
-    
+
     f.foreach { rb =>
       if (rb.records.nonEmpty) {
         sendBatch(rb)
@@ -134,8 +163,9 @@ class GrpcShuffleWorkerRepository(
       }
     }
   }
-  
+
   private def handleDone(): Unit = {
+    println("get Done")
     if (isSendingDone.get()) {
       sendComplete()
     }
@@ -143,11 +173,13 @@ class GrpcShuffleWorkerRepository(
 
   /** Send READY message */
   private def sendReady(): Unit = {
+    getFirstRequest.set(true)
     val ready = ExchangeMsg(
       ExchangeMsg.Msg.Ready(Ready(ok = true))
     )
 
     sendMessage(ready)
+    println("sent ready")
   }
 
   /** Send RecordBatch */
@@ -156,31 +188,39 @@ class GrpcShuffleWorkerRepository(
       ExchangeMsg.Msg.Batch(rb)
     )
     sendMessage(msg)
+    println("sent batch")
   }
-  
+
   private def sendDone(): Unit = {
     val ready = ExchangeMsg(
       ExchangeMsg.Msg.Done(Done(done = true))
     )
+    println("sent done")
 
     sendMessage(ready)
   }
 
   private def sendComplete(): Unit = {
+    println("complete")
     if (clientStream != null) clientStream.onCompleted()
-    if (serverStream != null) serverStream.onCompleted()
-    shutdown()
     clientStream = null
-    serverStream = null
   }
 
   private def sendMessage(msg: ExchangeMsg): Unit = {
     if (clientStream != null) clientStream.onNext(msg)
     if (serverStream != null) serverStream.onNext(msg)
   }
-  
+
   private def shutdown(): Unit = {
-    if (serverStream != null && server != null)
-      server.shutdown()
+    if (serverStream != null && server != null) {
+      serverStream.onCompleted()
+      server.shutdown
+      try
+        server.awaitTermination(30, TimeUnit.SECONDS)
+      catch {
+        case ex: InterruptedException =>
+      }
+      server.shutdownNow()
+    }
   }
 }

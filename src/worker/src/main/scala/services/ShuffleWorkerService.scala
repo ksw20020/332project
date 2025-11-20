@@ -12,7 +12,7 @@ import java.io.ByteArrayOutputStream
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
-class ShuffleWorkerService(workerId: Int, port: Int, savePath: String) {
+class ShuffleWorkerService(workerId: Int, port: Int, savePath: String, workerCount: Int) {
   private val RECORD_SIZE = 100
   private val READ_SIZE = 100
   private val fileRepository = DiskFileStorageRepository()
@@ -66,7 +66,7 @@ class ShuffleWorkerService(workerId: Int, port: Int, savePath: String) {
   
   private val roundRobinPairs: List[List[(Int, Int)]] = {
 
-    val initialPlayers = (1 to 20).toList
+    val initialPlayers = (1 to workerCount).toList
 
     def rotate(players: List[Int]): List[Int] = {
       players.head :: players.last :: players.tail.init
@@ -75,7 +75,7 @@ class ShuffleWorkerService(workerId: Int, port: Int, savePath: String) {
     val playerStates: LazyList[List[Int]] =
       LazyList.iterate(initialPlayers)(rotate)
 
-    playerStates.take(19).map { players =>
+    playerStates.take(workerCount - 1).map { players =>
       val len = players.length
 
       (0 until (len / 2)).map { i =>

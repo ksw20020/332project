@@ -53,3 +53,12 @@ message Done {
 service WorkerExchanger {
     rpc Exchange(stream ExchangeMsg) returns (stream ExchangeMsg);
 }
+
+
+service HealthCheckService {
+    rpc Ping (HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {}

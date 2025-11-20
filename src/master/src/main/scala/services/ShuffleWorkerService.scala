@@ -6,7 +6,10 @@ import scala.collection.concurrent.TrieMap
 import scala.concurrent.*
 import scala.concurrent.ExecutionContext.Implicits.global
 
-class ShuffleWorkerService(repository: GrpcShuffleRepository) {
+class ShuffleWorkerService(
+                            repository: GrpcShuffleRepository,
+                            workerCount: Int
+                          ) {
   private val doneCheckLists = TrieMap.empty[Int, Array[Boolean]]
   private val roundPromises = TrieMap.empty[Int, Promise[Unit]]
   private var deadWorkerId = -1
@@ -64,7 +67,7 @@ class ShuffleWorkerService(repository: GrpcShuffleRepository) {
   }
 
   private def executeRound(roundId: Int): Future[Unit] = {
-    val doneList = Array.fill(20)(false)
+    val doneList = Array.fill(workerCount)(false)
     val promise = Promise[Unit]()
 
     this.synchronized {
@@ -93,7 +96,7 @@ class ShuffleWorkerService(repository: GrpcShuffleRepository) {
   }
 
   private def executeRoundForDeadWorker(roundId: Int): Future[Unit] = {
-    val doneList = Array.fill(20)(false)
+    val doneList = Array.fill(workerCount)(false)
     val promise = Promise[Unit]()
 
     this.synchronized {
@@ -112,12 +115,12 @@ class ShuffleWorkerService(repository: GrpcShuffleRepository) {
     repository.onWorkerRoundDone = onWorkerRoundDone
     repository.onWorkerDead = onWorkerDead
 
-    executeRounds(0, 19)
+    executeRounds(0, workerCount)
   }
 
   private val roundRobinPairs: List[List[(Int, Int)]] = {
 
-    val initialPlayers = (1 to 20).toList
+    val initialPlayers = (1 to workerCount).toList
 
     def rotate(players: List[Int]): List[Int] = {
       players.head :: players.last :: players.tail.init
@@ -126,7 +129,7 @@ class ShuffleWorkerService(repository: GrpcShuffleRepository) {
     val playerStates: LazyList[List[Int]] =
       LazyList.iterate(initialPlayers)(rotate)
 
-    playerStates.take(19).map { players =>
+    playerStates.take(workerCount - 1).map { players =>
       val len = players.length
 
       (0 until (len / 2)).map { i =>

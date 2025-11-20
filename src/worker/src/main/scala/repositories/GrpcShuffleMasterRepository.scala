@@ -45,7 +45,6 @@ class GrpcShuffleMasterRepository(
       )
     )
     requestObserver.onNext(msg)
-    requestObserver.onCompleted()
   }
 
 }

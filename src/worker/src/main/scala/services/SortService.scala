@@ -4,6 +4,7 @@ import repositories.FileStorageRepository
 import scala.concurrent.{Future, ExecutionContext}
 import scala.collection.mutable.PriorityQueue
 import java.io.File
+import models._
 
 type RecordBatch = List[Record]
 
@@ -12,7 +13,7 @@ class SortService(
 )(implicit ec: ExecutionContext) {
 
   private val RECORD_SIZE = 100
-  private val READ_SIZE = 100
+  private val READ_SIZE = 10000
   private var readBlocks: Long = 0
 
   def sortNextBatch(filePath: String): Future[RecordBatch] = {
@@ -68,7 +69,7 @@ class SortService(
 
   private class ChunkedRecordIterator(path: String, repo: FileStorageRepository, chunkSize: Long) extends Iterator[Record] {
     private var currentOffset: Long = 0
-    private var buffer: Iterator[Record] = Iterator.empty
+    private var buffer: BufferedIterator[Record] = Iterator.empty.buffered
     private var _hasNext: Boolean = true
 
     fetchNextChunk()
@@ -81,7 +82,7 @@ class SortService(
         if (records.isEmpty) {
           _hasNext = false
         } else {
-          buffer = records.iterator
+          buffer = records.iterator.buffered
           currentOffset += records.size * 100L
         }
       } catch {
@@ -98,7 +99,7 @@ class SortService(
     }
 
     def head: Record = {
-      if (hasNext) buffer.buffered.head
+      if (hasNext) buffer.head
       else throw new NoSuchElementException("Iterator is empty")
     }
 

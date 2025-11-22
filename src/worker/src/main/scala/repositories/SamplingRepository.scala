@@ -37,7 +37,7 @@ class SamplingRepository(
     }
   }
 
-  private val requestObserver: StreamObserver[SamplingMsg] =
+  private lazy val requestObserver: StreamObserver[SamplingMsg] =
     stub.grpcSampling(responseObserver)
 
   def sendSamplingRequest(samples: Seq[RecordKey]): Unit = {

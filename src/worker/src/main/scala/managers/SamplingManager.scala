@@ -10,7 +10,7 @@ class SamplingManager (
                         workerId: Int,
                         filePath: String,
 ) {
-  private val service = SamplingService(
+  private val service = new SamplingService(
     filePath = filePath,
     channel = channel,
     workerId = workerId,

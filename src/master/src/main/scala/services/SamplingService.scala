@@ -23,8 +23,9 @@ class SamplingService(
   private val receivedFlags = new Array[Boolean](workerCount)
   @volatile private var _pivots: Option[Seq[ByteString]] = None
 
+  lazy val p = Promise[Unit]()
+
   def start(): Future[Unit] = {
-    val p = Promise[Unit]
     repository.onWorkerRequest = onWorkerRequest
     
     p.future
@@ -37,10 +38,11 @@ class SamplingService(
     }
 
     var shouldCompute = false
-
+    val workerIndex = workerId - 1
+    
     this.synchronized {
-      if (_pivots.isEmpty && !receivedFlags(workerId)) {
-        receivedFlags(workerId) = true
+      if (_pivots.isEmpty && !receivedFlags(workerIndex)) {
+        receivedFlags(workerIndex) = true
         receivedCount += 1
         allSamples ++= samples
 
@@ -66,7 +68,10 @@ class SamplingService(
       override def compare(x: ByteString, y: ByteString): Int = comparator.compare(x, y)
     }
 
-    val arr = allSamples.toArray
+    val arr = this.synchronized {
+      if (allSamples.isEmpty) return
+      allSamples.toArray
+    }
     Sorting.quickSort(arr)
 
     val pivotsNeeded = workerCount - 1
@@ -82,6 +87,9 @@ class SamplingService(
       _pivots = Some(data)
     }
     sendPartitionInfo()
+    if (p != null && !p.isCompleted) {
+      p.trySuccess(())
+    }
   }
 
   private def sendPartitionInfo(): Unit = {

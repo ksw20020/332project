@@ -8,10 +8,7 @@ import io.grpc.stub.StreamObserver
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, Future}
 
-/** Worker → Master 샘플링/파티션용 RPC 클라이언트 */
-class SamplingRepository(
-    channel: ManagedChannel
-) extends SamplingServiceGrpc.SamplingService {
+class SamplingRepository extends SamplingServiceGrpc.SamplingService {
 
   private val workerStreams: TrieMap[Int, StreamObserver[SamplingMsg]] = TrieMap.empty
   var onWorkerRequest: (Int, Seq[ByteString]) => Unit = (_, _) => () // (workerId, samples)

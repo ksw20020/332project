@@ -14,19 +14,17 @@ class SamplingService(
                        channel: io.grpc.ManagedChannel,
                        workerId: Int
                      ) {
-  private val repository = SamplingRepository(
+  private val repository = new SamplingRepository(
     channel = channel,
     workerId = workerId,
     onReceiveResult = onReceiveResult
   )
-  val p = Promise[Seq[PartitionRange]]
+  val p = Promise[Seq[PartitionRange]]()
   private val RECORD_SIZE = 100
 
   def executeRound(): Future[Seq[PartitionRange]] = {
     val samples = extractSamples(filePath, 500)
-    val keysOnly = samples.map(_.take(10))   // 앞 10바이트가 key
-
-    val records = samples.map(s => RecordKey(s))
+    val records = samples.map(s => RecordKey(s.take(10)))
     repository.sendSamplingRequest(records)
     p.future
   }

@@ -4,6 +4,7 @@ import repositories.GrpcShuffleMasterRepository
 import services.{SamplingService, ShuffleMasterService, ShuffleWorkerService}
 
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.{Future, Promise}
 
 class ShuffleManager(
                       channel: io.grpc.ManagedChannel,
@@ -12,25 +13,31 @@ class ShuffleManager(
                       savePath: String,
                       workerCount: Int
                     ) {
-  private val masterService = ShuffleMasterService(
+  private val masterService = new ShuffleMasterService(
     channel = channel,
     workerId = workerId,
     onStartRound = executeRound,
   )
-  private val workerService = ShuffleWorkerService(
+  private val workerService = new ShuffleWorkerService(
     workerId = workerId,
     port = port,
     savePath = savePath,
     workerCount = workerCount
   )
 
-  def startShuffle(): Unit = {
+  private val p: Promise[Unit] = Promise[Unit]()
+
+  def startShuffle(): Future[Unit] = {
     masterService.reportRoundDoneToMaster(0)
+    p.future
   }
 
   private def executeRound(roundId: Int): Unit = {
     workerService.executeRound(roundId).foreach { _ =>
       masterService.reportRoundDoneToMaster(roundId)
+      if (roundId == workerCount - 1) {
+        p.trySuccess(())
+      }
     }
   }
 }

@@ -29,7 +29,7 @@ class GrpcShuffleMasterRepository(
       println(s"Worker $workerId: Stream completed by master")
   }
 
-  private val requestObserver: StreamObserver[ShuffleMsg] =
+  private lazy val requestObserver: StreamObserver[ShuffleMsg] =
     stub.grpcShuffleStreamControl(responseObserver)
 
   def sendRoundDone(roundId: Int): Unit = {
@@ -38,7 +38,9 @@ class GrpcShuffleMasterRepository(
         RoundDone(round = roundId, workerId = workerId)
       )
     )
-    requestObserver.onNext(msg)
+    this.synchronized {
+      requestObserver.onNext(msg)
+    }
   }
 
 }

@@ -12,43 +12,43 @@ class ShuffleWorkerService(
                           ) {
   private val doneCheckLists = TrieMap.empty[Int, Array[Boolean]]
   private val roundPromises = TrieMap.empty[Int, Promise[Unit]]
-  private var deadWorkerId = -1
-  private var currentPair = (-1, -1)
+
+  @volatile private var deadWorkerId = -1
+  @volatile private var currentGlobalRound: Int = 0
+  private var catchUpPromise: Option[Promise[Unit]] = None
+  private val catchUpDoneSet = scala.collection.mutable.Set[(Int, Int)]()
 
   private def broadcastNextRound(roundId: Int): Unit = {
-    currentPair = (-1, -1)
     repository.broadcastNextRound(roundId)
   }
 
-  private def broadcastNextRoundForDeadWorker(roundId: Int): Unit = {
-    val pair = roundRobinPairs(roundId).find(p => p._1 == deadWorkerId || p._2 == deadWorkerId)
-    if (pair.isEmpty) {}
-    else {
-      currentPair = pair.get
-
-      pair.foreach { (worker1, worker2) =>
-        repository.sendNextRound(worker1, roundId)
-        repository.sendNextRound(worker2, roundId)
-      }
-    }
-  }
-
   private def onWorkerRoundDone(workerId: Int, roundId: Int): Unit = {
-    val doneList = doneCheckLists.get(roundId)
-    val promise = roundPromises.get(roundId)
+    // [Case A] 재부팅 감지: 죽었던 놈이 0라운드(Sort) 끝내고 옴 -> Catch-Up 시작
+    if (roundId == 0 && workerId == deadWorkerId) {
+      println(s"Reboot detected. Worker $workerId starting Catch-Up.")
+      startCatchUpProcess(workerId)
+      return
+    }
 
-    (doneList, promise) match {
+    // [Case B] Catch-Up 진행 중: 현재 글로벌 라운드보다 낮은 라운드 보고
+    if (roundId < currentGlobalRound) {
+      handleCatchUpDone(workerId, roundId)
+      return
+    }
+
+    // [Case C] 정상 진행 (또는 Catch-Up 합류)
+    val doneListOpt = doneCheckLists.get(roundId)
+    val promiseOpt = roundPromises.get(roundId)
+
+    (doneListOpt, promiseOpt) match {
       case (Some(doneList), Some(promise)) =>
+        val workerIndex = workerId - 1
         var allDone = false
         this.synchronized {
-          if(currentPair._1 == workerId || currentPair._2 == workerId) {
-            doneList(workerId) = true
-            if (doneList(currentPair._1) && doneList(currentPair._2)) allDone = true
+          if (workerIndex >= 0 && workerIndex < workerCount) {
+            doneList(workerIndex) = true
           }
-          else {
-            doneList(workerId) = true
-            if (!doneList.contains(false)) allDone = true
-          }
+          if (!doneList.contains(false)) allDone = true
         }
 
         if (allDone) {
@@ -62,7 +62,27 @@ class ShuffleWorkerService(
     }
   }
 
+  private def handleCatchUpDone(workerId: Int, roundId: Int): Unit = {
+    this.synchronized {
+      catchUpPromise.foreach { p =>
+        catchUpDoneSet.add((roundId, workerId))
+
+        // 해당 라운드의 페어를 찾아서
+        val pairs = getPairsForRound(roundId)
+        val pair = pairs.find(pair => pair._1 == deadWorkerId || pair._2 == deadWorkerId).get
+
+        // 둘 다 완료했으면 다음 단계로 진행 (Promise Success)
+        if (catchUpDoneSet.contains((roundId, pair._1)) && catchUpDoneSet.contains((roundId, pair._2))) {
+          catchUpDoneSet.clear()
+          catchUpPromise = None
+          p.trySuccess(())
+        }
+      }
+    }
+  }
+
   private def onWorkerDead(workerId: Int): Unit = {
+    println(s"[Master] Worker $workerId DEAD reported.")
     deadWorkerId = workerId
   }
 
@@ -86,6 +106,8 @@ class ShuffleWorkerService(
     def loop(roundId: Int): Future[Unit] = {
       if (roundId >= end) Future.successful(())
       else {
+        currentGlobalRound = roundId
+
         executeRound(roundId).flatMap { _ =>
           loop(roundId + 1)
         }
@@ -95,20 +117,30 @@ class ShuffleWorkerService(
     loop(start)
   }
 
-  private def executeRoundForDeadWorker(roundId: Int): Future[Unit] = {
-    val doneList = Array.fill(workerCount)(false)
-    val promise = Promise[Unit]()
+  private def startCatchUpProcess(recoveringWorkerId: Int): Unit = {
+    catchUpLoop(recoveringWorkerId, 1)
+  }
 
+  private def catchUpLoop(rebootedWorkerId: Int, roundToRun: Int): Unit = {
+    if (roundToRun == currentGlobalRound) {
+      println(s"Catch-Up Finished. Joining Global Round $roundToRun")
+      broadcastToPairOnly(rebootedWorkerId, roundToRun)
+      return
+    }
+
+    // [Running] 과거 라운드 수행
+    val p = Promise[Unit]()
     this.synchronized {
-      doneCheckLists(roundId) = doneList
-      roundPromises(roundId) = promise
+      catchUpPromise = Some(p)
     }
 
-    if(roundId != 0) {
-      broadcastNextRoundForDeadWorker(roundId)
-    }
+    // 해당 라운드의 파트너와 죽었던 워커에게만 명령 전송
+    broadcastToPairOnly(rebootedWorkerId, roundToRun)
 
-    promise.future
+    // 이 단계가 끝나면(p 완료) 다음 단계로
+    p.future.foreach { _ =>
+      catchUpLoop(rebootedWorkerId, roundToRun + 1)
+    }
   }
 
   def start(): Future[Unit] = {
@@ -116,6 +148,21 @@ class ShuffleWorkerService(
     repository.onWorkerDead = onWorkerDead
 
     executeRounds(0, workerCount)
+  }
+
+  private def broadcastToPairOnly(targetWorkerId: Int, roundId: Int): Unit = {
+    val pairs = getPairsForRound(roundId) // 기존 roundRobinPairs 접근 로직 활용
+    val pair = pairs.find(p => p._1 == targetWorkerId || p._2 == targetWorkerId)
+
+    pair.foreach { case (w1, w2) =>
+      repository.sendNextRound(w1, roundId)
+      repository.sendNextRound(w2, roundId)
+    }
+  }
+
+  private def getPairsForRound(roundId: Int): List[(Int, Int)] = {
+    if (roundId < 1 || roundId > roundRobinPairs.length) List.empty
+    else roundRobinPairs(roundId - 1)
   }
 
   private val roundRobinPairs: List[List[(Int, Int)]] = {

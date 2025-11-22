@@ -7,7 +7,7 @@ import repositories.DiskFileStorageRepository
 import models.Record
 import shuffle.control.grpcShuffle.RecordBatch
 
-import java.nio.file.Path
+import java.nio.file.{Files, Path, Paths}
 import java.io.ByteArrayOutputStream
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -15,8 +15,8 @@ import scala.concurrent.Future
 class ShuffleWorkerService(workerId: Int, port: Int, savePath: String, workerCount: Int) {
   private val RECORD_SIZE = 100
   private val READ_SIZE = 100
-  private val fileRepository = DiskFileStorageRepository()
-  private val grpcRepository = GrpcShuffleWorkerRepository(
+  private val fileRepository = new DiskFileStorageRepository()
+  private val grpcRepository = new GrpcShuffleWorkerRepository(
     onReceiveBatch = onReceiveBatch,
     onReceiveReady = onReceiveReady
   )
@@ -24,16 +24,27 @@ class ShuffleWorkerService(workerId: Int, port: Int, savePath: String, workerCou
   private var readBlocks: Long = 0
 
   def executeRound(roundId: Int): Future[Unit] = {
-    readBlocks = 0
+    this.synchronized {
+      readBlocks = 0
+    }
 
-    val (a, b) = roundRobinPairs(roundId)
+    val (a, b) = roundRobinPairs(roundId - 1)
       .find { case (x, y) => x == workerId || y == workerId }
       .get
 
     opponent = if (a == workerId) b else a
     val role = if (workerId > opponent) WorkerRole.Client else WorkerRole.Server
-    
-    grpcRepository.start(role, port, host)
+
+    val receivingFilePath = savePath + s"/shuffling/fromWorker$opponent.dat"
+    fileRepository.deleteFile(receivingFilePath)
+
+    grpcRepository.start(role, port, getHost()).recoverWith { case ex: Throwable =>
+      println(s"[Worker $workerId] Round $roundId failed. Cleaning up garbage data...")
+
+      fileRepository.deleteFile(receivingFilePath)
+
+      Future.failed(ex)
+    }
   }
   
   private def onReceiveBatch(rb: RecordBatch): Future[Unit] = {
@@ -45,10 +56,24 @@ class ShuffleWorkerService(workerId: Int, port: Int, savePath: String, workerCou
 
   private def onReceiveReady(): Future[RecordBatch] = {
     Future {
-      val path = savePath + s"/temp/temp_partition_forworker$workerId.dat"
-      val records = fileRepository.readBlock(path, readBlocks * RECORD_SIZE * READ_SIZE, RECORD_SIZE * READ_SIZE)
-      readBlocks += 1
-      listToRecordBatch(records)
+      val path = savePath + s"/temp/temp_partition_for_worker_$opponent.dat"
+
+      if (readBlocks >= 0) {
+        val offset = readBlocks * RECORD_SIZE * READ_SIZE
+        val length = RECORD_SIZE * READ_SIZE
+
+        val records = fileRepository.readBlock(path, offset, length)
+
+        if (records.nonEmpty) {
+          readBlocks += 1
+          listToRecordBatch(records)
+        } else {
+          readBlocks = -1
+          RecordBatch(records = Seq.empty)
+        }
+      } else {
+        RecordBatch(records = Seq.empty)
+      }
     }
   }
 
@@ -62,7 +87,7 @@ class ShuffleWorkerService(workerId: Int, port: Int, savePath: String, workerCou
     val recordsAsByteString = arr.map(r => ByteString.copyFrom(r.bytes))
     RecordBatch(records = recordsAsByteString)
   }
-  
+
   
   private val roundRobinPairs: List[List[(Int, Int)]] = {
 

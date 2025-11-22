@@ -1,6 +1,6 @@
 package repositories
 
-import io.grpc.{ManagedChannelBuilder, ServerBuilder, StatusRuntimeException}
+import io.grpc.{ManagedChannel, ManagedChannelBuilder, ServerBuilder, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 import shuffle.control.grpcShuffle.*
 
@@ -21,14 +21,15 @@ class GrpcShuffleWorkerRepository(
                                  )(implicit ec: ExecutionContext) {
 
   @volatile private var clientStream: StreamObserver[ExchangeMsg] = _
+  @volatile private var clientChannel: ManagedChannel = _
   @volatile private var serverStream: StreamObserver[ExchangeMsg] = _
   @volatile private var server: io.grpc.Server = _
-  private val getFirstRequest: AtomicBoolean = AtomicBoolean(false)
-  private val isSendingDone: AtomicBoolean = AtomicBoolean(false)
+  private val getFirstRequest: AtomicBoolean = new AtomicBoolean(false)
+  private val isSendingDone: AtomicBoolean = new AtomicBoolean(false)
 
   /** server or client */
   def start(role: WorkerRole, port: Int, host: String): Future[Unit] = {
-    val p = Promise[Unit]
+    val p = Promise[Unit]()
     clientStream = null
     serverStream = null
     getFirstRequest.set(false)
@@ -78,19 +79,19 @@ class GrpcShuffleWorkerRepository(
    * Connect to peer worker (client mode)
    */
   private def connectToPeer(peerHost: String, peerPort: Int, promise: Promise[Unit]): Unit = {
-    val channel = ManagedChannelBuilder
+    clientChannel = ManagedChannelBuilder
       .forAddress(peerHost, peerPort)
       .usePlaintext()
       .build()
 
-    val stub = WorkerExchangerGrpc.stub(channel)
-    val stubs = HealthCheckServiceGrpc.blockingStub(channel)
+    val stub = WorkerExchangerGrpc.stub(clientChannel)
+    val stubs = HealthCheckServiceGrpc.blockingStub(clientChannel)
 
     println(s"[WorkerNode] Connected to peer $peerHost:$peerPort")
     @tailrec
     def retrySendReady(): Unit = {
       try {
-        val blockingStub = HealthCheckServiceGrpc.blockingStub(channel)
+        val blockingStub = HealthCheckServiceGrpc.blockingStub(clientChannel)
 
         blockingStub.ping(HealthCheckRequest())
 
@@ -128,6 +129,7 @@ class GrpcShuffleWorkerRepository(
 
       override def onError(t: Throwable): Unit = {
         println(s"[Stream] Error: ${t.getMessage}")
+        promise.tryFailure(t)
       }
 
       override def onCompleted(): Unit = {
@@ -167,7 +169,11 @@ class GrpcShuffleWorkerRepository(
   private def handleDone(): Unit = {
     println("get Done")
     if (isSendingDone.get()) {
-      sendComplete()
+      if (clientStream != null) {
+        sendComplete()
+      } else {
+        sendDone()
+      }
     }
   }
 
@@ -221,6 +227,15 @@ class GrpcShuffleWorkerRepository(
         case ex: InterruptedException =>
       }
       server.shutdownNow()
+    }
+    if (clientChannel != null) {
+      clientChannel.shutdown()
+      try {
+        clientChannel.awaitTermination(5, TimeUnit.SECONDS)
+      } catch {
+        case ex: InterruptedException =>
+      }
+      clientChannel.shutdownNow()
     }
   }
 }

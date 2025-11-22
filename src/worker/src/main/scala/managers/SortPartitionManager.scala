@@ -1,7 +1,11 @@
 package managers
 
-import scala.concurrent.{Future, ExecutionContext, Await}
-import scala.concurrent.duration._
+import models.PartitionRange
+import services.{PartitionService, SortService}
+
+import java.io.File
+import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutorService, Future}
+import scala.concurrent.duration.*
 import java.util.concurrent.Executors
 
 class SortPartitionManager(
@@ -12,7 +16,7 @@ class SortPartitionManager(
 ) {
   // 디스크 I/O에 최적화된 고정 스레드 풀을 생성합니다.
   private val NUM_IO_THREADS = 4 // 예시 값, 실제 환경에 따라 최적화 필요
-  private implicit val ec: ExecutionContext = ExecutionContext.fromExecutorService(
+  private implicit val ec: ExecutionContextExecutorService  = ExecutionContext.fromExecutorService(
     Executors.newFixedThreadPool(NUM_IO_THREADS)
   )
 

@@ -22,7 +22,7 @@ class SortService(
       val length = RECORD_SIZE * READ_SIZE
       
       val records: List[Record] = try {
-        fileRepo.readChunk(filePath, offset, length)
+        fileRepo.readBlock(filePath, offset, length)
       } catch {
         case e: Exception =>
           throw new RuntimeException(s"Failed to read chunk at block $readBlocks", e)
@@ -78,7 +78,7 @@ class SortService(
       if (buffer.hasNext) return
 
       try {
-        val records = repo.readChunk(path, currentOffset, chunkSize)
+        val records = repo.readBlock(path, currentOffset, chunkSize)
         if (records.isEmpty) {
           _hasNext = false
         } else {

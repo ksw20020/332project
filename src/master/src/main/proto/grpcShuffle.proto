@@ -11,13 +11,6 @@ message RoundDone {
     int32 worker_id = 2;
 }
 
-/* 새로 추가: Worker가 Master에 접속할 때 쓰는 등록 메시지 */
-message Register {
-  int32 worker_id = 1;
-  string ip       = 2; // 필요 없으면 지워도 됨
-  int32 port      = 3; // 필요 없으면 지워도 됨
-}
-
 message ShuffleMsg {
     oneof payload {
         RoundStart start = 1;

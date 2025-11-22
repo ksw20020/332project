@@ -16,9 +16,6 @@ class GrpcShuffleRepository extends ShuffleControlServiceGrpc.ShuffleControlServ
     new StreamObserver[ShuffleMsg] {
       override def onNext(msg: ShuffleMsg): Unit = {
         msg.payload match {
-          case ShuffleMsg.Payload.Register(reg) =>
-            registerWorkerStream(reg.workerId, responseObserver)
-            
           case ShuffleMsg.Payload.Done(done) =>
             if (!workerStreams.contains(done.workerId)) {
               registerWorkerStream(done.workerId, responseObserver)

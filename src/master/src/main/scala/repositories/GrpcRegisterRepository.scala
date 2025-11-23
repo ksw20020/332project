@@ -20,18 +20,37 @@ class GrpcRegisterRepository(expectedWorkerCount: Int)
       respObs: StreamObserver[RegisterResponse]
   ): Unit = {
 
+    val ip   = req.ip
+    val port = req.port
+
     val (assignedId, total) = this.synchronized {
-      if (nextId > expectedWorkerCount)
-        (0, expectedWorkerCount)
-      else {
-        val id = nextId
-        nextId += 1
-        workers.put(id, (req.ip, req.port))
-        (id, expectedWorkerCount)
+
+      // 1. 기존 IP인지 확인
+      ipToId.get(ip) match {
+        case Some(existingId) =>
+          // 기존 worker가 다시 들어온 경우 → 동일 ID 반환
+          workers.put(existingId, (ip, port))
+          (existingId, expectedWorkerCount)
+
+        case None =>
+          // 신규 worker
+          if (nextId > expectedWorkerCount) {
+            // 모든 worker가 이미 등록됨 → 등록 거부
+            (0, expectedWorkerCount)
+          } else {
+            val id = nextId
+            nextId += 1
+
+            ipToId.put(ip, id)
+            workers.put(id, (ip, port))
+
+            (id, expectedWorkerCount)
+          }
       }
+    
     }
 
-    onRegistered(assignedId, req.ip, req.port, total)
+    onRegistered(assignedId, ip, port, total)
 
     val resp = RegisterResponse(
       workerId = assignedId,

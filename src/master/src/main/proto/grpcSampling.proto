@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package sampling;
+
+message SamplingRequest {
+    int32 worker_id = 1;
+    repeated bytes samples = 2;
+}
+
+message SamplingResult {
+    repeated bytes pivots = 1;
+}
+
+message SamplingMsg {
+    oneof payload {
+        SamplingRequest request = 1;
+        SamplingResult result = 2;
+    }
+}
+
+service SamplingService {
+    rpc GrpcSampling(stream SamplingMsg) returns (stream SamplingMsg);
+}

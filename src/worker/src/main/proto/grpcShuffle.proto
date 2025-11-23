@@ -22,3 +22,37 @@ message ShuffleMsg {
 service ShuffleControlService {
     rpc GrpcShuffleStreamControl(stream ShuffleMsg) returns (stream ShuffleMsg);
 }
+
+
+message ExchangeMsg {
+    oneof msg {
+        RecordBatch batch = 1;
+        Ready ready = 2;
+        Done done = 3;
+    }
+}
+
+message RecordBatch {
+    repeated bytes records = 1;
+}
+
+message Ready {
+    bool ok = 1;
+}
+
+message Done {
+    bool done = 1;
+}
+
+service WorkerExchanger {
+    rpc Exchange(stream ExchangeMsg) returns (stream ExchangeMsg);
+}
+
+
+service HealthCheckService {
+    rpc Ping (HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {}

@@ -1,84 +1,111 @@
 package services
 
 import com.google.protobuf.ByteString
-import managers.Sampler
-import repositories.SamplingRepository
+import repositories.GrpcShuffleWorkerRepository
+import repositories.WorkerRole
+import repositories.DiskFileStorageRepository
+import models.Record
+import shuffle.control.grpcShuffle.RecordBatch
 
-import scala.concurrent.{ExecutionContext, Future}
+import java.nio.file.{Files, Path, Paths}
+import java.io.ByteArrayOutputStream
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
-/** Worker에서 실제 라운드별 작업을 수행하는 서비스.
-  *
-  *  - Round 1: 로컬 데이터 정렬 + 샘플 추출 + Master로 전송
-  *  - Round 2: Master에서 pivot 받아서 파티션/셔플 (TODO)
-  */
-class ShuffleWorkerService(
-    workerId: Int,
-    samplingRepo: SamplingRepository,
-    sampler: Sampler
-)(implicit ec: ExecutionContext) {
+class ShuffleWorkerService(workerId: Int, port: Int, savePath: String, workerCount: Int) {
+  private val RECORD_SIZE = 100
+  private val READ_SIZE = 100
+  private val fileRepository = new DiskFileStorageRepository()
+  private val grpcRepository = new GrpcShuffleWorkerRepository(
+    onReceiveBatch = onReceiveBatch,
+    onReceiveReady = onReceiveReady
+  )
+  private var opponent: Int = -1
+  private var readBlocks: Long = 0
 
-  /** ShuffleManager에서 roundId를 넘겨 호출하는 메인 엔트리 */
-  def executeRound(roundId: Int): Future[Unit] = roundId match {
-    case 1 => runSamplingRound()
-    case 2 => runPartitionRound()
-    case _ => Future.unit
+  def executeRound(roundId: Int): Future[Unit] = {
+    this.synchronized {
+      readBlocks = 0
+    }
+
+    val (a, b) = roundRobinPairs(roundId - 1)
+      .find { case (x, y) => x == workerId || y == workerId }
+      .get
+
+    opponent = if (a == workerId) b else a
+    val role = if (workerId > opponent) WorkerRole.Client else WorkerRole.Server
+
+    val receivingFilePath = savePath + s"/shuffling/fromWorker$opponent.dat"
+    fileRepository.deleteFile(receivingFilePath)
+
+    grpcRepository.start(role, port, getHost()).recoverWith { case ex: Throwable =>
+      println(s"[Worker $workerId] Round $roundId failed. Cleaning up garbage data...")
+
+      fileRepository.deleteFile(receivingFilePath)
+
+      Future.failed(ex)
+    }
   }
-
-  /** Round 1: 샘플링 라운드 */
-  private def runSamplingRound(): Future[Unit] = {
+  
+  private def onReceiveBatch(rb: RecordBatch): Future[Unit] = {
     Future {
-      val local = loadLocalData()
-      val sorted = sortLocalData(local)
-
-      val keysOnly = sorted.map(_.take(10))   // 앞 10바이트가 key라 가정
-      val samples = sampler.stratifiedSample(keysOnly)
-
-      val byteStrings = samples.map(s => ByteString.copyFrom(s))
-      samplingRepo.sendSample(workerId, byteStrings)
-    }.flatten
+      val path = savePath + s"/shuffling/fromWorker$opponent.dat"
+      fileRepository.saveRecord(path, recordBatchToArr(rb), true)
+    }
   }
 
+  private def onReceiveReady(): Future[RecordBatch] = {
+    Future {
+      val path = savePath + s"/temp/temp_partition_for_worker_$opponent.dat"
 
-  /** Round 2: pivot 정보를 받아 파티션/셔플 수행 */
-  private def runPartitionRound(): Future[Unit] = {
-    for {
-      pivots <- samplingRepo.fetchPartitionInfo()
-      _      <- Future {
-        applyPivotsAndShuffle(pivots)
+      if (readBlocks >= 0) {
+        val offset = readBlocks * RECORD_SIZE * READ_SIZE
+        val length = RECORD_SIZE * READ_SIZE
+
+        val records = fileRepository.readBlock(path, offset, length)
+
+        if (records.nonEmpty) {
+          readBlocks += 1
+          listToRecordBatch(records)
+        } else {
+          readBlocks = -1
+          RecordBatch(records = Seq.empty)
+        }
+      } else {
+        RecordBatch(records = Seq.empty)
       }
-    } yield ()
+    }
   }
 
-  // -----------------------------
-  // 아래 함수들은 네 환경에 맞게 채워야 하는 부분
-  // -----------------------------
-
-  /** Gensort로 생성한 로컬 데이터를 읽어오는 부분
-    *   - 파일 경로, 포맷 등은 과제/환경에 맞게 구현
-    */
-  private def loadLocalData(): Seq[Array[Byte]] = {
-    // TODO: 로컬 입력 파일에서 레코드 읽어서 Seq[Array[Byte]] 로 반환
-    // 예: 각 레코드가 100바이트(키 10 + value 90)라면 그 단위로 잘라서 읽기
-    Seq.empty
+  private def recordBatchToArr(rb: RecordBatch): Array[Byte] = {
+    val out = new ByteArrayOutputStream()
+    rb.records.foreach(bs => out.write(bs.toByteArray))
+    out.toByteArray
   }
 
-  /** 로컬 데이터 정렬 로직
-    *   - 기본 구현은 키를 String으로 보고 사전식 정렬
-    *   - 필요하면 훨씬 최적화된 비교 로직으로 교체 가능
-    */
-  private def sortLocalData(sorted: Seq[Array[Byte]]): Seq[Array[Byte]] = {
-    // TODO: 키 부분(예: 앞 10바이트)만 잘라서 비교하는 쪽으로 최적화 가능
-    sorted.sortBy(rec => new String(rec.take(10), "US-ASCII"))
+  private def listToRecordBatch(arr: List[Record]): RecordBatch = {
+    val recordsAsByteString = arr.map(r => ByteString.copyFrom(r.bytes))
+    RecordBatch(records = recordsAsByteString)
   }
 
-  /** Master에서 받은 pivots 기준으로
-    *   - 로컬 데이터를 여러 파티션으로 나누고
-    *   - 각 파티션을 대상 Worker에게 전송하는 로직
-    */
-  private def applyPivotsAndShuffle(pivots: Seq[ByteString]): Unit = {
-    // TODO:
-    //  1) loadLocalData() or 캐시된 로컬 정렬 데이터를 가져온다
-    //  2) pivots 기준으로 구간 나누기
-    //  3) 각 구간을 적절한 Worker에게 전송 (gRPC / 파일 등)
+  
+  private val roundRobinPairs: List[List[(Int, Int)]] = {
+
+    val initialPlayers = (1 to workerCount).toList
+
+    def rotate(players: List[Int]): List[Int] = {
+      players.head :: players.last :: players.tail.init
+    }
+
+    val playerStates: LazyList[List[Int]] =
+      LazyList.iterate(initialPlayers)(rotate)
+
+    playerStates.take(workerCount - 1).map { players =>
+      val len = players.length
+
+      (0 until (len / 2)).map { i =>
+        (players(i), players(len - 1 - i))
+      }.toList
+    }.toList
   }
 }

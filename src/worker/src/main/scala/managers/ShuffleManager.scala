@@ -1,30 +1,43 @@
 package managers
 
-import repositories.{GrpcShuffleMasterRepository, SamplingRepository}
-import services.{ShuffleMasterService, ShuffleWorkerService}
+import repositories.GrpcShuffleMasterRepository
+import services.{SamplingService, ShuffleMasterService, ShuffleWorkerService}
+
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.{Future, Promise}
 
 class ShuffleManager(
                       channel: io.grpc.ManagedChannel,
-                      workerId: Int
+                      workerId: Int,
+                      port: Int,
+                      savePath: String,
+                      workerCount: Int
                     ) {
-  private val masterService = ShuffleMasterService(
+  private val masterService = new ShuffleMasterService(
     channel = channel,
     workerId = workerId,
     onStartRound = executeRound,
   )
+  private val workerService = new ShuffleWorkerService(
+    workerId = workerId,
+    port = port,
+    savePath = savePath,
+    workerCount = workerCount
+  )
 
-  private val samplingRepository = new SamplingRepository(channel)
-  private val sampler            = new Sampler()
-  private val workerService = new ShuffleWorkerService(workerId, samplingRepository, sampler)
+  private val p: Promise[Unit] = Promise[Unit]()
 
-  def startShuffle(): Unit = {
+  def startShuffle(): Future[Unit] = {
     masterService.reportRoundDoneToMaster(0)
+    p.future
   }
 
   private def executeRound(roundId: Int): Unit = {
-    workerService.executeRound(roundId).foreach {
+    workerService.executeRound(roundId).foreach { _ =>
       masterService.reportRoundDoneToMaster(roundId)
+      if (roundId == workerCount - 1) {
+        p.trySuccess(())
+      }
     }
   }
 }

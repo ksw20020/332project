@@ -1,21 +1,48 @@
 package managers
 
 import services.SortService
+import services.PartitionService
+import scala.concurrent.{Future, ExecutionContext}
+import java.io.File
+import models._
 
 class SortPartitionManager(
   sortService: SortService,
-  partitionService: PartitionService, // PartitionService 가정
-  ...) {
+  partitionService: PartitionService
+)(implicit ec: ExecutionContext) {
 
-  def sortAndPartitionAll(inputFiles: List[String]): Unit = {
-    // 멀티스레딩 환경을 위한 Future/ThreadPool을 가정
+  def start_local(
+    inputFiles: List[String], 
+    ranges: Array[PartitionRange]
+  ): Future[Unit] = {
     
-    inputFiles.foreach { path =>
-      // 1. Local Sort 실행
-      val sortedRecords = sortService.execute(path)
-      
-      // 2. Partitioning 실행 (Sort 결과를 PartitionService로 전달)
-      // partitionService.partitionRecords(sortedRecords, partitionRanges, tempDir)
+    println(s"[SortPartitionManager] Starting Sort & Partition for ${inputFiles.size} files.")
+
+    val futures = inputFiles.map { filePath =>
+      processSingleFile(filePath, ranges)
     }
+
+    Future.sequence(futures).map(_ => ())
+  }
+
+  private def processSingleFile(filePath: String, ranges: Array[PartitionRange]): Future[Unit] = {
+    sortService.sortNextBatch(filePath).flatMap { sortedRecords =>
+      if (sortedRecords.nonEmpty) {
+        val result = partitionService.partitionRecords(sortedRecords, ranges)
+        Future.successful(result)
+      } else {
+        Future.successful(Map.empty[Int, File])
+      }
+    }.map(_ => ())
+  }
+
+  def start_aftersuffle(
+    inputPartitionFiles: Seq[String], 
+    outputFilePath: String
+  ): Future[Unit] = {
+    
+    println(s"[SortPartitionManager] Starting Merge Sort -> $outputFilePath")
+    
+    sortService.kWayMerge(inputPartitionFiles, outputFilePath)
   }
 }

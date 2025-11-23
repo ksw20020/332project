@@ -1,9 +1,10 @@
 package managers
 
 import services.SortService
-import services.partitionService
+import services.PartitionService
 import scala.concurrent.{Future, ExecutionContext}
 import java.io.File
+import models._
 
 class SortPartitionManager(
   sortService: SortService,

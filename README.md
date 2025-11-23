@@ -48,14 +48,31 @@ jdk 등 개발환경 세팅, 프로젝트 추가 <br>
    - Partitioning을 고려한 파일 입출력 구현 중
  - 마스터 내부 샘플링 구현
  - 셔플링 내부 fault tolerance용 인터페이스 구현
-
-
+  
 #### goal of next week
 | Member | Goal |
 | ---- | ---- |
 | 김성원 | Partitioning, k-way merge sort 구현 |
 | 진시완 | Registration 구현 |
 | 채동욱 | shuffling 중 worker-worker 통신 부분 구현 |
+
+### Week 6 [link](https://github.com/ksw20020/332project/pull/6)
+1차 구현 완료
+ - 마스터 - 워커 Registration 구현
+ - 워커 - 워커 간 셔플링 구현
+   - 더미 데이터로 테스트
+ - 샘플링 코드 bidirectional streaming으로 전환
+ - Partitioning 구현
+   - k way merge sort 구현
+ - 디스크 IO repository 구현
+   - 개발자 로컬 테스트
+
+#### goal of next week
+| Member | Goal |
+| ---- | ---- |
+| 김성원 | 스크립트 작성 및 워커 세팅, 디버깅 |
+| 진시완 | fault tolerance 관련 버그 픽스, 스크립트 작성 및 워커 세팅, 디버깅 |
+| 채동욱 | future 연결,  디버깅 |
 
 <br>
 <br>

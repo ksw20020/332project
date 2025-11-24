@@ -116,15 +116,22 @@ class GrpcShuffleWorkerRepository(
 
     new StreamObserver[ExchangeMsg] {
 
-      override def onNext(msg: ExchangeMsg): Unit = msg.msg match {
-        case ExchangeMsg.Msg.Batch(batch) =>
-          handleRecordBatch(batch)
+      override def onNext(msg: ExchangeMsg): Unit =
+      try {
+        msg.msg match {
+          case ExchangeMsg.Msg.Batch(batch) =>
+            handleRecordBatch(batch)
 
-        case ExchangeMsg.Msg.Ready(ready) =>
-          handleReady()
+          case ExchangeMsg.Msg.Ready(ready) =>
+            handleReady()
 
-        case ExchangeMsg.Msg.Done(done) =>
-          handleDone()
+          case ExchangeMsg.Msg.Done(done) =>
+            handleDone()
+        }
+      } catch {
+        case e: Exception =>
+          println(s"CRITICAL ERROR in onNext: ${e.getMessage}")
+          e.printStackTrace()
       }
 
       override def onError(t: Throwable): Unit = {
@@ -213,8 +220,10 @@ class GrpcShuffleWorkerRepository(
   }
 
   private def sendMessage(msg: ExchangeMsg): Unit = {
-    if (clientStream != null) clientStream.onNext(msg)
-    if (serverStream != null) serverStream.onNext(msg)
+    this.synchronized {
+      if (clientStream != null) clientStream.onNext(msg)
+      if (serverStream != null) serverStream.onNext(msg)
+    }
   }
 
   private def shutdown(): Unit = {

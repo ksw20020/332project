@@ -1,8 +1,8 @@
 package services
 
-import repositories.RegistrationRepository
+import repositories.GrpcRegisterRepository
 
-class WorkerRegistrationService(repo: RegistrationRepository) {
+class WorkerRegistrationService(repo: GrpcRegisterRepository) {
 
   /** Worker → Master 로 등록 요청 */
   def register(ip: String, port: Int): (Int, Int) = {

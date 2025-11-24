@@ -6,7 +6,7 @@ import shuffle.control.grpcShuffle._
 class GrpcShuffleMasterRepository(
                              channel: io.grpc.ManagedChannel,
                              workerId: Int,
-                             onStartRound: Int => Unit,
+                             onStartRound: (Int, String, Int) => Unit,
                            ) {
   private val stub = ShuffleControlServiceGrpc.stub(channel)
 
@@ -14,8 +14,10 @@ class GrpcShuffleMasterRepository(
     override def onNext(msg: ShuffleMsg): Unit = {
       msg.payload match {
         case ShuffleMsg.Payload.Start(start) =>
-          println(s"Worker $workerId: Start round ${start.round}")
-          onStartRound(start.round)
+          println(s"Worker $workerId: Start round ${start.round} with partner ${start.partnerIp}:${start.partnerPort}")
+
+          // [변경] 마스터가 준 정보를 콜백으로 넘김
+          onStartRound(start.round, start.partnerIp, start.partnerPort)
 
         case _ =>
           println(s"Worker $workerId: Unknown message received")

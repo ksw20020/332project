@@ -4,6 +4,8 @@ package shuffle.control;
 
 message RoundStart {
     int32 round = 1;
+    string partner_ip = 2;
+    int32 partner_port = 3;
 }
 
 message RoundDone {

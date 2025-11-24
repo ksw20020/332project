@@ -5,7 +5,7 @@ import repositories.GrpcShuffleMasterRepository
 class ShuffleMasterService(
                             channel: io.grpc.ManagedChannel,
                             workerId: Int,
-                            onStartRound: Int => Unit,
+                            onStartRound: (Int, String, Int) => Unit,
                           ) {
   private val repository = new GrpcShuffleMasterRepository(
     channel = channel,

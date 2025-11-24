@@ -41,10 +41,10 @@ class SamplingService(
     val partitionRanges = allBoundaries.sliding(2).zipWithIndex.map {
       case (Seq(start, end), index) =>
         PartitionRange(
-          id = index,
+          id = index + 1,
           startKey = RecordKey(start.toByteArray),
           endKey = RecordKey(end.toByteArray),
-          destWorkerId = index
+          destWorkerId = index + 1
         )
     }.toSeq
 

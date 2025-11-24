@@ -73,7 +73,7 @@ class DiskFileStorageRepository extends FileStorageRepository {
     * 레코드 쓰기 구현 (PartitionService에서 호출됨)
     */
   override def saveRecord(path: String, recordBytes: Array[Byte], append: Boolean): Unit = {
-    require(recordBytes.length == RECORD_SIZE, s"Data must be exactly $RECORD_SIZE bytes.")
+    require(recordBytes.length % RECORD_SIZE == 0, s"Data must be exactly $RECORD_SIZE bytes.")
 
     Using(new FileOutputStream(path, append)) { fos =>
       fos.write(recordBytes)

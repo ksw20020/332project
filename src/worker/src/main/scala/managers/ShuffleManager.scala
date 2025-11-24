@@ -32,8 +32,8 @@ class ShuffleManager(
     p.future
   }
 
-  private def executeRound(roundId: Int): Unit = {
-    workerService.executeRound(roundId).foreach { _ =>
+  private def executeRound(roundId: Int, partnerIp: String, partnerPort: Int): Unit = {
+    workerService.executeRound(roundId, partnerIp, partnerPort).foreach { _ =>
       masterService.reportRoundDoneToMaster(roundId)
       if (roundId == workerCount - 1) {
         p.trySuccess(())

@@ -43,7 +43,10 @@ class SamplingRepository(
   def sendSamplingRequest(samples: Seq[RecordKey]): Unit = {
     val msg = SamplingMsg(
       payload = SamplingMsg.Payload.Request(
-        SamplingRequest(samples = samples.map(record => ByteString.copyFrom(record.key)))
+        SamplingRequest(
+          workerId = workerId,
+          samples = samples.map(record => ByteString.copyFrom(record.key))
+        )
       )
     )
     requestObserver.onNext(msg)

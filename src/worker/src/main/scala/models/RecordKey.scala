@@ -19,4 +19,6 @@ case class RecordKey(key: Array[Byte]) extends Comparable[RecordKey] {
   }
 
   override def hashCode(): Int = java.util.Arrays.hashCode(key)
+
+  override def toString: String = key.map("%02X".format(_)).mkString
 }

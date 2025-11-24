@@ -18,7 +18,6 @@ import repositories.{SamplingRepository, GrpcShuffleMasterRepository, FileStorag
 
 object WorkerApp {
   implicit val ec: ExecutionContext = ExecutionContext.global
-  val controlExecutor = Executors.newFixedThreadPool(2)
   private val WORKER_PORT = 5002
 
   def main(args: Array[String]): Unit = {
@@ -77,6 +76,7 @@ object WorkerApp {
     val channel = ManagedChannelBuilder
       .forAddress(masterIp, masterPort)
       .usePlaintext()
+      .maxInboundMessageSize(100 * 1024 * 1024) // 대용량 전송 허용
       .build()
 
     try {
@@ -87,8 +87,10 @@ object WorkerApp {
       val (workerId, workerCount) = regManager.start()
       println(s"Registered successfully! WorkerID: $workerId, TotalWorkers: $workerCount")
 
-      val mainDir = s"C://Study/for$workerId"
-      val tempDir = s"C://Study/for$workerId/temp"
+      val baseDir = new File(".").getCanonicalPath
+      val tempDir = s"$baseDir/temp"
+
+      // 디렉토리 생성
       new File(tempDir).mkdirs()
 
       println("\n[Phase 2] Sampling...")
@@ -125,7 +127,7 @@ object WorkerApp {
             println("\n[Phase 5] Final Merge...")
 
             // 셔플된 결과 파일들이 저장된 위치 (ShuffleWorkerService 로직에 따름)
-            val shuffleOutputDir = new File(s"C://Study/for$workerId/shuffling")
+            val shuffleOutputDir = new File(s"$baseDir/shuffling")
             val shuffledFiles = if (shuffleOutputDir.exists()) {
               shuffleOutputDir.listFiles().filter(_.getName.endsWith(".dat")).map(_.getAbsolutePath).toSeq
             } else {

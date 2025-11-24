@@ -5,7 +5,7 @@ import services.SamplingService
 import scala.concurrent._
 
 class SamplingManager(service: SamplingService) {
-  def shuffle(): Future[Unit] = {
+  def start(): Future[Unit] = {
     service.start()
   }
 }

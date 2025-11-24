@@ -1,5 +1,0 @@
-package master
-
-class commonutil {
-  
-}

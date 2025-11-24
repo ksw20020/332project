@@ -14,5 +14,5 @@ message RegisterResponse {
 
 service RegisterService {
     // 단순한 unary RPC 한 번으로 등록을 끝낸다.
-    rpc Register(RegisterRequest) returns (RegisterResponse);
+    rpc GrpcRegister(RegisterRequest) returns (RegisterResponse);
 }

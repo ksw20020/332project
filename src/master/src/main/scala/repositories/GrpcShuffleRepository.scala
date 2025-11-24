@@ -46,20 +46,17 @@ class GrpcShuffleRepository extends ShuffleControlServiceGrpc.ShuffleControlServ
     }
   }
 
-  def broadcastNextRound(roundId: Int): Unit = {
+  def sendNextRound(targetWorkerId: Int, roundId: Int, partnerIp: String, partnerPort: Int): Unit = {
     val startMsg = ShuffleMsg(
-      payload = ShuffleMsg.Payload.Start(RoundStart(roundId))
+      payload = ShuffleMsg.Payload.Start(
+        RoundStart(
+          round = roundId,
+          partnerIp = partnerIp,
+          partnerPort = partnerPort
+        )
+      )
     )
-    workerStreams.foreach { case (workerId, observer) =>
-      observer onNext startMsg
-    }
-  }
-
-  def sendNextRound(workerId: Int, roundId: Int): Unit = {
-    val startMsg = ShuffleMsg(
-      payload = ShuffleMsg.Payload.Start(RoundStart(roundId))
-    )
-    workerStreams.get(workerId).foreach(_.onNext(startMsg))
+    workerStreams.get(targetWorkerId).foreach(_.onNext(startMsg))
   }
 
   private def registerWorkerStream(workerId: Int, stream: StreamObserver[ShuffleMsg]): Unit =

@@ -8,6 +8,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 class ShuffleWorkerService(
                             repository: GrpcShuffleRepository,
+                            registrationService: RegistrationService,
                             workerCount: Int
                           ) {
   private val doneCheckLists = TrieMap.empty[Int, Array[Boolean]]
@@ -19,7 +20,16 @@ class ShuffleWorkerService(
   private val catchUpDoneSet = scala.collection.mutable.Set[(Int, Int)]()
 
   private def broadcastNextRound(roundId: Int): Unit = {
-    repository.broadcastNextRound(roundId)
+    val pairs = getPairsForRound(roundId)
+    val registration = registrationService.getRegisteredWorkers
+
+    pairs.foreach { case (idA, idB) =>
+      val (ipA, portA) = registration(idA)
+      val (ipB, portB) = registration(idB)
+
+      repository.sendNextRound(idA, roundId, ipB, portB)
+      repository.sendNextRound(idB, roundId, ipA, portA)
+    }
   }
 
   private def onWorkerRoundDone(workerId: Int, roundId: Int): Unit = {
@@ -150,13 +160,17 @@ class ShuffleWorkerService(
     executeRounds(0, workerCount)
   }
 
-  private def broadcastToPairOnly(targetWorkerId: Int, roundId: Int): Unit = {
-    val pairs = getPairsForRound(roundId) // 기존 roundRobinPairs 접근 로직 활용
-    val pair = pairs.find(p => p._1 == targetWorkerId || p._2 == targetWorkerId)
+  private def broadcastToPairOnly(rebootedWorkerId: Int, roundId: Int): Unit = {
+    val pairs = getPairsForRound(roundId)
+    val pair = pairs.find(p => p._1 == rebootedWorkerId || p._2 == rebootedWorkerId)
+    val registry = registrationService.getRegisteredWorkers
 
-    pair.foreach { case (w1, w2) =>
-      repository.sendNextRound(w1, roundId)
-      repository.sendNextRound(w2, roundId)
+    pair.foreach { case (idA, idB) =>
+      val (ipA, portA) = registry(idA)
+      val (ipB, portB) = registry(idB)
+
+      repository.sendNextRound(idA, roundId, ipB, portB)
+      repository.sendNextRound(idB, roundId, ipA, portA)
     }
   }
 

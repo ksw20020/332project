@@ -18,8 +18,7 @@ class GrpcRegisterRepository(expectedWorkerCount: Int)
     (_, _, _, _) => ()
 
   // 수정: unary RPC 시그니처는 Future 반환이어야 함
-  override def register(req: RegisterRequest): Future[RegisterResponse] = Future {
-
+  override def grpcRegister(req: RegisterRequest): Future[RegisterResponse] = Future {
     val ip   = req.ip
     val port = req.port
 

@@ -1,8 +1,9 @@
 package repositories
 
 import register.grpcRegister._
-import io.grpc.stub.StreamObserver
 import scala.collection.concurrent.TrieMap
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
 
 /** Master가 Worker 등록을 직접 받는 gRPC 서버 Repository */
 class GrpcRegisterRepository(expectedWorkerCount: Int)
@@ -16,10 +17,8 @@ class GrpcRegisterRepository(expectedWorkerCount: Int)
   var onRegistered: (Int, String, Int, Int) => Unit =
     (_, _, _, _) => ()
 
-  override def register(
-      req: RegisterRequest,
-      respObs: StreamObserver[RegisterResponse]
-  ): Unit = {
+  // 수정: unary RPC 시그니처는 Future 반환이어야 함
+  override def register(req: RegisterRequest): Future[RegisterResponse] = Future {
 
     val ip   = req.ip
     val port = req.port
@@ -41,10 +40,8 @@ class GrpcRegisterRepository(expectedWorkerCount: Int)
           } else {
             val id = nextId
             nextId += 1
-
             ipToId.put(ip, id)
             workers.put(id, (ip, port))
-
             (id, expectedWorkerCount)
           }
       }
@@ -53,13 +50,10 @@ class GrpcRegisterRepository(expectedWorkerCount: Int)
 
     onRegistered(assignedId, ip, port, total)
 
-    val resp = RegisterResponse(
+    RegisterResponse(
       workerId = assignedId,
       workerCount = total
     )
-
-    respObs.onNext(resp)
-    respObs.onCompleted()
   }
 
   def registeredWorkers: Map[Int,(String,Int)] = workers.toMap

@@ -9,6 +9,7 @@ class GrpcRegisterRepository(expectedWorkerCount: Int)
   extends RegisterServiceGrpc.RegisterService {
 
   private val workers = TrieMap.empty[Int, (String, Int)]
+  private val ipToId = TrieMap.empty[String, Int]               // ip → workerId
   @volatile private var nextId: Int = 1
 
   /** 콜백 → Manager 또는 Main이 설정 */

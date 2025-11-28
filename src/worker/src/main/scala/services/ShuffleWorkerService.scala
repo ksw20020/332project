@@ -9,6 +9,7 @@ import shuffle.control.grpcShuffle.RecordBatch
 
 import java.nio.file.{Files, Path, Paths}
 import java.io.ByteArrayOutputStream
+import java.nio.file.{Files, Paths}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
@@ -22,6 +23,31 @@ class ShuffleWorkerService(workerId: Int, port: Int, savePath: String, workerCou
   )
   private var opponent: Int = -1
   private var readBlocks: Long = 0
+
+  def moveSelfDataToShuffling(): Future[Unit] = {
+    Future {
+      // 1. 옮길 원본 경로 (자신의 temp 데이터)
+      val sourcePathStr = savePath + s"/temp/temp_partition_for_worker_$workerId.dat"
+      // 2. 이동할 목적지 경로 (자신의 shuffling 데이터)
+      val destPathStr = savePath + s"/shuffling/fromWorker$workerId.dat"
+
+      val source = Paths.get(sourcePathStr)
+      val dest = Paths.get(destPathStr)
+
+      if (Files.exists(source)) {
+        try {
+          Files.move(source, dest)
+          println(s"[Worker $workerId] Successfully moved self-data to $destPathStr")
+        } catch {
+          case e: Exception =>
+            println(s"[Worker $workerId] Failed to move self-data: ${e.getMessage}")
+            throw e
+        }
+      } else {
+        println(s"[Worker $workerId] No self-data found at $sourcePathStr. Skipping move.")
+      }
+    }
+  }
 
   def executeRound(roundId: Int, partnerIp: String, partnerPort: Int): Future[Unit] = {
     this.synchronized {

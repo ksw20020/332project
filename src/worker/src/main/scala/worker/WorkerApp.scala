@@ -89,9 +89,25 @@ object WorkerApp {
 
       val baseDir = new File(".").getCanonicalPath
       val tempDir = s"$baseDir/temp"
+      val shufflingDir = s"$baseDir/shuffling"
 
-      // 디렉토리 생성
-      new File(tempDir).mkdirs()
+      recreateDir(tempDir)
+      recreateDir(shufflingDir)
+
+      def recreateDir(path: String): Unit = {
+        val dir = new File(path)
+
+        if (dir.exists()) {
+          def deleteRecursively(f: File): Unit = {
+            if (f.isDirectory) f.listFiles().foreach(deleteRecursively)
+            f.delete()
+          }
+
+          dir.listFiles().foreach(deleteRecursively)
+        }
+
+        dir.mkdirs()
+      }
 
       println("\n[Phase 2] Sampling...")
       val samplingManager = new SamplingManager(channel, workerId, inputFiles.head)
@@ -116,7 +132,7 @@ object WorkerApp {
             channel = channel,
             workerId = workerId,
             port = WORKER_PORT,
-            savePath = s"C://Study/for$workerId",
+            savePath = baseDir,
             workerCount = workerCount
           )
 
@@ -135,7 +151,8 @@ object WorkerApp {
             }
 
             // 최종 결과 파일 경로
-            new File(outputDir).mkdirs()
+            recreateDir(outputDir)
+
             val finalOutputPath = s"$outputDir/part-$workerId"
 
             sortPartitionManager.start_aftersuffle(shuffledFiles, finalOutputPath).map { _ =>

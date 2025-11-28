@@ -28,6 +28,7 @@ class ShuffleManager(
   private val p: Promise[Unit] = Promise[Unit]()
 
   def startShuffle(): Future[Unit] = {
+    workerService.moveSelfDataToShuffling()
     masterService.reportRoundDoneToMaster(0)
     p.future
   }

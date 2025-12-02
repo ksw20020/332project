@@ -25,4 +25,3 @@ message FinalizeSignalRequest {
 message FinalizeSignalResponse {
   bool ok = 1;
 }
-s

@@ -13,14 +13,20 @@ class WorkerFinalizationService(
   private val stub = FinalizationServiceGrpc.stub(channel)
   private val finalizePromise = Promise[Unit]()
 
-  def sendFinalizePrepared(): Future[Unit] = {
-    val req = WorkerFinalizeRequest(workerId = workerId)
+  def reportFinalizeReady(): Future[Unit] = {
+    val req = WorkerFinalizeRequest(worker_id = workerId)
     stub.reportFinalize(req).map(_ => ())
+  }
+
+  // Master가 보내는 FinalizeSignal RPC의 응답이 도착할 때 호출됨
+  def receiveFinalizeSignal(): Future[Unit] = {
+    val req = FinalizeSignalRequest(ok = true)
+    stub.sendFinalizeSignal(req).map { _ =>
+      finalizePromise.trySuccess(())
+    }.map(_ => ())
   }
 
   def waitFinalizeSignal(): Future[Unit] =
     finalizePromise.future
-
-  def onFinalizeSignal(): Unit =
-    finalizePromise.trySuccess(())
 }
+

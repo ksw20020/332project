@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package finalization.grpcFinalization;
+package finalization;
 
 service FinalizationService {
   // Worker → Master : 종료 준비 완료 보고

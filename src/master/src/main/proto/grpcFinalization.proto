@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package finalization.grpcFinalization;
+
+service FinalizationService {
+  // Worker → Master : 종료 준비 완료 보고
+  rpc ReportFinalize(WorkerFinalizeRequest) returns (WorkerFinalizeResponse);
+
+  // Master → Worker : 모두 준비됨 → 종료해라
+  rpc SendFinalizeSignal(FinalizeSignalRequest) returns (FinalizeSignalResponse);
+}
+
+message WorkerFinalizeRequest {
+  int32 worker_id = 1;
+}
+
+message WorkerFinalizeResponse {
+  bool ok = 1;
+}
+
+message FinalizeSignalRequest {
+  bool ok = 1;
+}
+
+message FinalizeSignalResponse {
+  bool ok = 1;
+}
+s

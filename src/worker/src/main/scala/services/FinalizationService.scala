@@ -1,7 +1,9 @@
 package finalization.worker
 
-import finalization.grpcFinalization._
+import finalization.grpcFinalization.*
 import io.grpc.ManagedChannel
+
+import java.util.concurrent.TimeUnit
 import scala.concurrent.{Future, Promise}
 import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -21,7 +23,8 @@ class WorkerFinalizationService(
   // Master가 보내는 FinalizeSignal RPC의 응답이 도착할 때 호출됨
   def receiveFinalizeSignal(): Future[Unit] = {
     val req = FinalizeSignalRequest(ok = true)
-    stub.sendFinalizeSignal(req).map { _ =>
+    val longWaitingStub = stub.withDeadlineAfter(60, TimeUnit.MINUTES)
+    longWaitingStub.sendFinalizeSignal(req).map { _ =>
       finalizePromise.trySuccess(())
     }.map(_ => ())
   }

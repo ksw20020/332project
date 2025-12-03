@@ -1,13 +1,14 @@
 package worker
 
 import io.grpc.ManagedChannelBuilder
+import io.grpc.netty.NettyChannelBuilder
 import repositories.DiskFileStorageRepository
 
 import java.io.File
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import java.nio.file.{Files, Paths}
-import java.util.concurrent.Executors
+import java.util.concurrent.{Executors, TimeUnit}
 import scala.collection.mutable.ListBuffer
 
 // 필요한 매니저 및 서비스, 리포지토리 임포트
@@ -73,10 +74,15 @@ object WorkerApp {
     }
 
     // 3. gRPC Channel 생성 (Master 연결용)
-    val channel = ManagedChannelBuilder
+    val channel = NettyChannelBuilder
       .forAddress(masterIp, masterPort)
       .usePlaintext()
       .maxInboundMessageSize(100 * 1024 * 1024) // 대용량 전송 허용
+      // [중요] 30초마다 핑을 보내서 연결이 살아있음을 알림
+      .keepAliveTime(30, TimeUnit.SECONDS)
+      .keepAliveTimeout(10, TimeUnit.SECONDS)
+      // [가장 중요] 진행 중인 RPC가 없어도(즉, 대기 중일 때도) 핑을 보낼 것인가? -> true
+      .keepAliveWithoutCalls(true)
       .build()
 
     try {

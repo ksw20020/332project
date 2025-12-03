@@ -1,11 +1,11 @@
 package master
 
-import finalization.{FinalizationManager, FinalizationRepository, FinalizationService}
 import io.grpc.ServerBuilder
 import io.grpc.netty.NettyServerBuilder
 import register.grpcRegister.RegisterServiceGrpc
 import sampling.grpcSampling.SamplingServiceGrpc
 import shuffle.control.grpcShuffle.ShuffleControlServiceGrpc
+import finalization.grpcFinalization.FinalizationServiceGrpc
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -15,6 +15,7 @@ import java.util.logging.Logger
 import managers.{RegistrationManager, SamplingManager, ShuffleManager}
 import services.{RegistrationService, SamplingService, ShuffleWorkerService}
 import repositories.{GrpcRegisterRepository, SamplingRepository, GrpcShuffleRepository}
+import finalization.{FinalizationManager, FinalizationRepository, FinalizationService}
 
 object MasterApp {
   def main(args: Array[String]): Unit = {
@@ -60,6 +61,7 @@ object MasterApp {
       .addService(RegisterServiceGrpc.bindService(regRepo, global))
       .addService(SamplingServiceGrpc.bindService(sampRepo, global))
       .addService(ShuffleControlServiceGrpc.bindService(shuffleRepo, global))
+      .addService(FinalizationServiceGrpc.bindService(finalizationRepo, global))
       .permitKeepAliveTime(10, TimeUnit.SECONDS)
       .permitKeepAliveWithoutCalls(true)
       .build()

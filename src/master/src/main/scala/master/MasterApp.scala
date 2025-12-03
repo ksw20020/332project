@@ -1,10 +1,12 @@
 package master
 
 import io.grpc.ServerBuilder
+import io.grpc.netty.NettyServerBuilder
 import register.grpcRegister.RegisterServiceGrpc
 import sampling.grpcSampling.SamplingServiceGrpc
 import shuffle.control.grpcShuffle.ShuffleControlServiceGrpc
 
+import java.util.concurrent.TimeUnit
 import scala.concurrent.ExecutionContext.Implicits.global
 import java.util.logging.Logger
 
@@ -50,10 +52,12 @@ object MasterApp {
     shuffleManager.shuffle()    // 셔플/소트 준비
 
     // 6. gRPC 서버 빌드 및 시작
-    val server = ServerBuilder.forPort(port)
+    val server = NettyServerBuilder.forPort(port)
       .addService(RegisterServiceGrpc.bindService(regRepo, global))
       .addService(SamplingServiceGrpc.bindService(sampRepo, global))
       .addService(ShuffleControlServiceGrpc.bindService(shuffleRepo, global))
+      .permitKeepAliveTime(10, TimeUnit.SECONDS)
+      .permitKeepAliveWithoutCalls(true)
       .build()
 
     server.start()

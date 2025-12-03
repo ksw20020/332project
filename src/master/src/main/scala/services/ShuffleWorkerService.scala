@@ -16,6 +16,8 @@ class ShuffleWorkerService(
 
   @volatile private var deadWorkerId = -1
   @volatile private var currentGlobalRound: Int = 0
+
+  private var deferredCatchUp: Option[(Int, Int, Int)] = None
   private var catchUpPromise: Option[Promise[Unit]] = None
   private val catchUpDoneSet = scala.collection.mutable.Set[(Int, Int)]()
 
@@ -45,30 +47,33 @@ class ShuffleWorkerService(
       handleCatchUpDone(workerId, roundId)
       return
     }
+    this.synchronized {
 
     // [Case C] 정상 진행 (또는 Catch-Up 합류)
     val doneListOpt = doneCheckLists.get(roundId)
     val promiseOpt = roundPromises.get(roundId)
 
-    (doneListOpt, promiseOpt) match {
-      case (Some(doneList), Some(promise)) =>
-        val workerIndex = workerId - 1
-        var allDone = false
-        this.synchronized {
+      (doneListOpt, promiseOpt) match {
+        case (Some(doneList), Some(promise)) =>
+          val workerIndex = workerId - 1
+
           if (workerIndex >= 0 && workerIndex < workerCount) {
             doneList(workerIndex) = true
+            // 캐치업 트리거 체크
+            checkAndTriggerDeferredCatchUp(workerId)
           }
-          if (!doneList.contains(false)) allDone = true
-        }
 
-        if (allDone) {
-          doneCheckLists.remove(roundId)
-          roundPromises.remove(roundId)
-          promise.trySuccess(())
-        }
+          // 2. 모두 완료되었는지 확인
+          if (!doneList.contains(false)) {
+            // 3. 완료되었다면 즉시 맵에서 제거하고 Promise 완료
+            doneCheckLists.remove(roundId)
+            roundPromises.remove(roundId)
+            promise.trySuccess(())
+          }
 
-      case _ =>
-        println(s"Received Done(worker=$workerId round=$roundId)")
+        case _ =>
+          println(s"Ignored duplicate or late Done(worker=$workerId round=$roundId)")
+      }
     }
   }
 
@@ -91,6 +96,20 @@ class ShuffleWorkerService(
     }
   }
 
+  // 보류된 캐치업이 있고, 지금 일을 마친 워커가 그 파트너라면 실행
+  private def checkAndTriggerDeferredCatchUp(finishedWorkerId: Int): Unit = {
+    deferredCatchUp match {
+      case Some((rebootId, round, partnerId)) if partnerId == finishedWorkerId =>
+        println(s"[CatchUp] Partner $partnerId is now IDLE. Resuming Catch-Up Round $round for $rebootId")
+        this.synchronized {
+          deferredCatchUp = None
+        } // 대기열 해제
+        broadcastToPairOnly(rebootId, round) // 이제 전송!
+      case _ =>
+      // 매칭되는 보류 작업 없음
+    }
+  }
+
   private def onWorkerDead(workerId: Int): Unit = {
     println(s"[Master] Worker $workerId DEAD reported.")
     deadWorkerId = workerId
@@ -101,6 +120,7 @@ class ShuffleWorkerService(
     val promise = Promise[Unit]()
 
     this.synchronized {
+      currentGlobalRound = roundId
       doneCheckLists(roundId) = doneList
       roundPromises(roundId) = promise
     }
@@ -116,8 +136,6 @@ class ShuffleWorkerService(
     def loop(roundId: Int): Future[Unit] = {
       if (roundId >= end) Future.successful(())
       else {
-        currentGlobalRound = roundId
-
         executeRound(roundId).flatMap { _ =>
           loop(roundId + 1)
         }
@@ -144,10 +162,25 @@ class ShuffleWorkerService(
       catchUpPromise = Some(p)
     }
 
-    // 해당 라운드의 파트너와 죽었던 워커에게만 명령 전송
-    broadcastToPairOnly(rebootedWorkerId, roundToRun)
+    // [수정] 무조건 전송하는 게 아니라, 파트너 상태를 보고 결정
+    val pairs = getPairsForRound(roundToRun)
+    val pair = pairs.find(p => p._1 == rebootedWorkerId || p._2 == rebootedWorkerId).get
+    val partnerId = if (pair._1 == rebootedWorkerId) pair._2 else pair._1
 
-    // 이 단계가 끝나면(p 완료) 다음 단계로
+    this.synchronized {
+      val isPartnerIdle = isWorkerIdleInCurrentRound(partnerId)
+
+      if (isPartnerIdle) {
+        println(s"[CatchUp] Partner $partnerId is IDLE. Executing Round $roundToRun immediately.")
+        broadcastToPairOnly(rebootedWorkerId, roundToRun)
+      } else {
+        println(s"[CatchUp] Partner $partnerId is BUSY. Deferring Round $roundToRun.")
+        this.synchronized {
+          deferredCatchUp = Some((rebootedWorkerId, roundToRun, partnerId))
+        }
+      }
+    }
+
     p.future.foreach { _ =>
       catchUpLoop(rebootedWorkerId, roundToRun + 1)
     }
@@ -158,6 +191,17 @@ class ShuffleWorkerService(
     repository.onWorkerDead = onWorkerDead
 
     executeRounds(0, workerCount)
+  }
+
+  private def isWorkerIdleInCurrentRound(workerId: Int): Boolean = {
+    doneCheckLists.get(currentGlobalRound) match {
+      case Some(doneList) =>
+        val idx = workerId - 1
+        if (idx >= 0 && idx < doneList.length) doneList(idx)
+        else false
+      case None =>
+        true
+    }
   }
 
   private def broadcastToPairOnly(rebootedWorkerId: Int, roundId: Int): Unit = {

@@ -1,5 +1,6 @@
 package master
 
+import finalization.{FinalizationManager, FinalizationRepository, FinalizationService}
 import io.grpc.ServerBuilder
 import io.grpc.netty.NettyServerBuilder
 import register.grpcRegister.RegisterServiceGrpc
@@ -34,16 +35,19 @@ object MasterApp {
     val regRepo = new GrpcRegisterRepository(workerCount)
     val sampRepo = new SamplingRepository()
     val shuffleRepo = new GrpcShuffleRepository()
+    val finalizationRepo = new FinalizationRepository(workerCount)
 
     // 3. Service 생성 (Repository + workerCount 주입)
     val regService = new RegistrationService(regRepo)
     val sampService = new SamplingService(sampRepo, workerCount)
     val shuffleService = new ShuffleWorkerService(shuffleRepo, regService, workerCount)
+    val finalizationService = new FinalizationService(finalizationRepo)
 
     // 4. Manager 생성 (Service 주입)
     val regManager = new RegistrationManager(regService)
     val sampManager = new SamplingManager(sampService)
     val shuffleManager = new ShuffleManager(shuffleService)
+    val finalizationManager = new FinalizationManager(finalizationService)
 
     // 5. Manager 로직 시작 (Non-blocking)
     println("Starting managers...")
@@ -62,6 +66,17 @@ object MasterApp {
 
     server.start()
     println(s"Master Server started successfully on port $port")
+
+    finalizationManager.start {
+      server.shutdown
+      try
+        server.awaitTermination(30, TimeUnit.SECONDS)
+      catch {
+        case ex: InterruptedException =>
+      }
+      server.shutdownNow()
+      return
+    }
 
     // 7. 서버 종료 전까지 메인 스레드 대기
     Runtime.getRuntime.addShutdownHook(new Thread {

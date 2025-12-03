@@ -87,6 +87,10 @@ object WorkerApp {
       val (workerId, workerCount) = regManager.start()
       println(s"Registered successfully! WorkerID: $workerId, TotalWorkers: $workerCount")
 
+      // finalization 준비
+      val finalizationService = new finalization.worker.WorkerFinalizationService(channel, workerId)
+      val finalizationManager = new finalization.worker.WorkerFinalizationManager(finalizationService)
+
       val baseDir = new File(".").getCanonicalPath
       val tempDir = s"$baseDir/temp"
       val shufflingDir = s"$baseDir/shuffling"
@@ -163,6 +167,10 @@ object WorkerApp {
       }
 
       Await.result(workflowFuture, Duration.Inf)
+
+      println("[Worker] Starting Finalization Phase...")
+      Await.result(finalizationManager.start(), Duration.Inf) 
+      println("[Worker] Finalization completed. Worker shutting down.")
 
     } catch {
       case e: Exception =>

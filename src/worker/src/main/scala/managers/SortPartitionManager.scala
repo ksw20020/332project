@@ -29,7 +29,7 @@ class SortPartitionManager(
     sortService.sortNextBatch(filePath).flatMap { sortedRecords =>
       if (sortedRecords.nonEmpty) {
         val result = partitionService.partitionRecords(sortedRecords, ranges)
-        Future.successful(result)
+        processSingleFile(filePath: String, ranges: Array[PartitionRange])
       } else {
         Future.successful(Map.empty[Int, File])
       }

@@ -33,6 +33,7 @@ class SortService(
         records.sortBy(_.key)
       } else {
         List.empty[Record]
+        readBlocks = 0
       }
     }
   }

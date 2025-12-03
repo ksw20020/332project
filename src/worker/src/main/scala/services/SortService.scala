@@ -32,8 +32,8 @@ class SortService(
         readBlocks += 1
         records.sortBy(_.key)
       } else {
-        List.empty[Record]
         readBlocks = 0
+        List.empty[Record]
       }
     }
   }

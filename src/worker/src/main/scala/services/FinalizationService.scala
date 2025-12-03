@@ -14,7 +14,7 @@ class WorkerFinalizationService(
   private val finalizePromise = Promise[Unit]()
 
   def reportFinalizeReady(): Future[Unit] = {
-    val req = WorkerFinalizeRequest(worker_id = workerId)
+    val req = WorkerFinalizeRequest(workerId = workerId)
     stub.reportFinalize(req).map(_ => ())
   }
 

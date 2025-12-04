@@ -29,6 +29,14 @@ class GrpcShuffleWorkerRepository(
 
   /** server or client */
   def start(role: WorkerRole, port: Int, host: String): Future[Unit] = {
+    val isServerActive = server != null && !server.isShutdown
+    val isClientActive = clientChannel != null && !clientChannel.isShutdown
+
+    if (isServerActive || isClientActive) {
+      println("[WorkerNode] Communication is already in progress. Ignoring new start request.")
+      // 이미 실행 중인 작업이 있으므로, 현재 요청은 무시하고 성공 처리(혹은 기존 Future 반환 설계 필요)
+      return Future.successful(())
+    }
     shutdown()
     val p = Promise[Unit]()
     clientStream = null

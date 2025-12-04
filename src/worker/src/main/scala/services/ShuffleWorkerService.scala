@@ -61,8 +61,10 @@ class ShuffleWorkerService(workerId: Int, port: Int, savePath: String, workerCou
     opponent = if (a == workerId) b else a
     val role = if (workerId > opponent) WorkerRole.Client else WorkerRole.Server
 
-    val receivingFilePath = savePath + s"/fromWorker$opponent.dat"
+    val receivingFilePath = savePath + s"/shuffling/fromWorker$opponent.dat"
     fileRepository.deleteFile(receivingFilePath)
+
+
 
     grpcRepository.start(role, partnerPort, partnerIp).recoverWith { case ex: Throwable =>
       println(s"[Worker $workerId] Round $roundId failed. Cleaning up garbage data...")

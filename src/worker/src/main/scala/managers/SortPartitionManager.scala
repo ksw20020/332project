@@ -13,6 +13,7 @@ class SortPartitionManager(
 )(implicit ec: ExecutionContext) {
 
   private val BLOCK_SIZE_BYTES = 100 * 10000L
+  private val MAX_MERGE_FACTOR = 100
 
   def start_local(
     inputFiles: List[String], 
@@ -66,14 +67,8 @@ class SortPartitionManager(
           val finalLocalFile = s"$temp/temp_partition_for_worker_$wid.dat"
           
           println(s"[LocalMerge] Merging ${chunkFiles.size} chunks into $finalLocalFile")
-          
-          // C. SortService의 kWayMerge 재사용 (이미 정렬된 청크들이므로 효율적)
-          // 주의: kWayMerge는 Future를 반환하므로 Await하거나 flatMap 체이닝 필요.
-          // 여기서는 Future 안의 Future 구조를 피하기 위해 아래에서 flatten함.
-          sortService.kWayMerge(chunkFiles, finalLocalFile).map { _ =>
-            // D. (선택사항) 병합 완료 후 중간 청크 파일 삭제
-             chunkFiles.foreach(f => new File(f).delete())
-          }
+
+          recursiveMerge(chunkFiles, finalLocalFile, wid, 0)
         } else {
           Future.successful(())
         }
@@ -91,5 +86,44 @@ class SortPartitionManager(
     println(s"[SortPartitionManager] Starting Merge Sort -> $outputFilePath")
     
     sortService.kWayMerge(inputPartitionFiles, outputFilePath)
+  }
+
+  private def recursiveMerge(
+                              files: Seq[String],
+                              outputFile: String,
+                              workerId: Int,
+                              pass: Int
+                            ): Future[Unit] = {
+
+    // 종료 조건: 파일이 병합 인자(MAX_MERGE_FACTOR)보다 적으면 한 번에 병합하여 끝냄
+    if (files.size <= MAX_MERGE_FACTOR) {
+      println(s"[LocalMerge] Worker $workerId (Final Pass): Merging ${files.size} files -> $outputFile")
+      sortService.kWayMerge(files, outputFile).map { _ =>
+        // 원본 청크들 삭제
+        files.foreach(f => new File(f).delete())
+      }
+    } else {
+      // 진행: 파일을 배치 단위로 잘라서 중간 파일(intermediate) 생성
+      println(s"[LocalMerge] Worker $workerId (Pass $pass): Merging ${files.size} files in batches of $MAX_MERGE_FACTOR...")
+
+      // 파일을 MAX_MERGE_FACTOR 개수만큼 그룹으로 나눔
+      val batches = files.grouped(MAX_MERGE_FACTOR).toSeq
+
+      // 각 배치를 병렬(혹은 순차)로 병합하여 중간 파일 생성
+      val batchFutures = batches.zipWithIndex.map { case (batchFiles, index) =>
+        val intermediateFile = s"$temp/intermediate_w${workerId}_p${pass}_$index.dat"
+
+        sortService.kWayMerge(batchFiles, intermediateFile).map { _ =>
+          // 병합된 원본 청크 삭제 (디스크 공간 확보)
+          batchFiles.foreach(f => new File(f).delete())
+          intermediateFile // 생성된 중간 파일 경로 반환
+        }
+      }
+
+      // 모든 배치가 처리되면, 생성된 중간 파일들로 다시 재귀 호출
+      Future.sequence(batchFutures).flatMap { intermediateFiles =>
+        recursiveMerge(intermediateFiles, outputFile, workerId, pass + 1)
+      }
+    }
   }
 }

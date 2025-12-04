@@ -11,6 +11,8 @@ class SortPartitionManager(
   partitionService: PartitionService
 )(implicit ec: ExecutionContext) {
 
+  private val BLOCK_SIZE_BYTES = 100 * 10000L
+
   def start_local(
     inputFiles: List[String], 
     ranges: Array[PartitionRange]
@@ -19,17 +21,18 @@ class SortPartitionManager(
     println(s"[SortPartitionManager] Starting Sort & Partition for ${inputFiles.size} files.")
 
     val futures = inputFiles.map { filePath =>
-      processSingleFile(filePath, ranges)
+      processSingleFile(filePath, ranges, 0L)
     }
 
     Future.sequence(futures).map(_ => ())
   }
 
-  private def processSingleFile(filePath: String, ranges: Array[PartitionRange]): Future[Unit] = {
-    sortService.sortNextBatch(filePath).flatMap { sortedRecords =>
+  private def processSingleFile(filePath: String, ranges: Array[PartitionRange], currentOffset: Long): Future[Unit] = {
+    sortService.sortNextBatch(filePath, currentOffset).flatMap { sortedRecords =>
       if (sortedRecords.nonEmpty) {
         val result = partitionService.partitionRecords(sortedRecords, ranges)
-        processSingleFile(filePath: String, ranges: Array[PartitionRange])
+        val nextOFFset = currentOffset + (sortedRecords.size * 100L)
+        processSingleFile(filePath, ranges, nextOFFset)
       } else {
         Future.successful(Map.empty[Int, File])
       }

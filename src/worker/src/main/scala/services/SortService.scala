@@ -14,25 +14,20 @@ class SortService(
 
   private val RECORD_SIZE = 100
   private val READ_SIZE = 10000
-  private var readBlocks: Long = 0
 
-  def sortNextBatch(filePath: String): Future[RecordBatch] = {
+  def sortNextBatch(filePath: String, offset: Long): Future[RecordBatch] = {
     Future {
-      val offset = readBlocks * RECORD_SIZE * READ_SIZE
       val length = RECORD_SIZE * READ_SIZE
-      
       val records: List[Record] = try {
         fileRepo.readBlock(filePath, offset, length)
       } catch {
         case e: Exception =>
-          throw new RuntimeException(s"Failed to read chunk at block $readBlocks", e)
+          throw new RuntimeException(s"Failed to read chunk at block", e)
       }
 
       if (records.nonEmpty) {
-        readBlocks += 1
         records.sortBy(_.key)
       } else {
-        readBlocks = 0
         List.empty[Record]
       }
     }
@@ -62,10 +57,6 @@ class SortService(
         }
       }
     }
-  }
-
-  def resetCounter(): Unit = {
-    readBlocks = 0
   }
 
   private class ChunkedRecordIterator(path: String, repo: FileStorageRepository, chunkSize: Long) extends Iterator[Record] {

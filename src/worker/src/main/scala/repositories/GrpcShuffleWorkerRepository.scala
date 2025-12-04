@@ -29,6 +29,7 @@ class GrpcShuffleWorkerRepository(
 
   /** server or client */
   def start(role: WorkerRole, port: Int, host: String): Future[Unit] = {
+    shutdown()
     val p = Promise[Unit]()
     clientStream = null
     serverStream = null
@@ -228,7 +229,11 @@ class GrpcShuffleWorkerRepository(
 
   private def shutdown(): Unit = {
     if (serverStream != null && server != null) {
-      serverStream.onCompleted()
+      try {
+        serverStream.onCompleted()
+      } catch {
+        case _: Exception =>
+      }
       server.shutdown
       try
         server.awaitTermination(30, TimeUnit.SECONDS)

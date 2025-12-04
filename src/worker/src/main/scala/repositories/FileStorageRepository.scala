@@ -22,6 +22,8 @@ trait FileStorageRepository {
     */
   def saveRecord(path: String, recordBytes: Array[Byte], append: Boolean): Unit
 
+  def saveBatch(path: String, records: List[Record], append: Boolean): Unit
+
   /**
     * 주어진 경로의 파일을 삭제합니다 (예: 임시 파일 정리 시).
     * @param path 삭제할 파일 경로
@@ -78,6 +80,23 @@ class DiskFileStorageRepository extends FileStorageRepository {
     Using(new FileOutputStream(path, append)) { fos =>
       fos.write(recordBytes)
     }.getOrElse(throw new IOException(s"Failed to write data to file: $path"))
+  }
+
+  override def saveBatch(path: String, records: List[Record], append: Boolean): Unit = {
+    // 1. 파일을 연다 (append 모드)
+    val fos = new FileOutputStream(path, append)
+    // 2. 버퍼를 끼운다 (이게 핵심! 작은 쓰기들을 모아서 OS에 던짐 -> 속도 매우 빠름)
+    val bos = new BufferedOutputStream(fos, 65536) // 64KB 버퍼 (크기는 조절 가능)
+
+    try {
+      // 3. 메모리에 거대 배열을 만들지 않고, 순회하면서 바로 쓴다
+      records.foreach { record =>
+        bos.write(record.bytes)
+      }
+    } finally {
+      // 4. 닫으면 버퍼에 남은 내용이 자동으로 flush 되고 파일이 닫힌다
+      bos.close()
+    }
   }
   
   override def deleteFile(path: String): Boolean = {

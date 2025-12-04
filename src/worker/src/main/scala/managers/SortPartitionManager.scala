@@ -8,7 +8,8 @@ import models._
 
 class SortPartitionManager(
   sortService: SortService,
-  partitionService: PartitionService
+  partitionService: PartitionService,
+  temp: String
 )(implicit ec: ExecutionContext) {
 
   private val BLOCK_SIZE_BYTES = 100 * 10000L
@@ -53,8 +54,8 @@ class SortPartitionManager(
     val mergeFutures = destWorkerIds.map { wid =>
       Future {
         // A. 해당 워커로 가는 모든 중간 파일(chunk) 찾기
-        val chunkPrefix = s"chunk_partition_worker${wid}_"
-        val chunkFiles = new File(tempDir).listFiles()
+        val chunkPrefix = s"chunk_partition_for_worker_${wid}_"
+        val chunkFiles = new File(temp).listFiles()
           .filter(f => f.isFile && f.getName.startsWith(chunkPrefix))
           .map(_.getAbsolutePath)
           .toSeq
@@ -62,7 +63,7 @@ class SortPartitionManager(
         if (chunkFiles.nonEmpty) {
           // B. 최종 목적지 파일명 (하나의 파일)
           // 예: temp/partition_for_worker_1.dat
-          val finalLocalFile = s"$tempDir/partition_for_worker_$wid.dat"
+          val finalLocalFile = s"$temp/temp_partition_for_worker_$wid.dat"
           
           println(s"[LocalMerge] Merging ${chunkFiles.size} chunks into $finalLocalFile")
           

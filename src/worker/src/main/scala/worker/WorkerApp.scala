@@ -131,7 +131,7 @@ object WorkerApp {
         val sortService = new SortService(fileRepo)
         val partitionService = new PartitionService(fileRepo, tempDir)
 
-        val sortPartitionManager = new SortPartitionManager(sortService, partitionService)
+        val sortPartitionManager = new SortPartitionManager(sortService, partitionService, tempDir)
 
         sortPartitionManager.start_local(inputFiles, ranges.toArray).flatMap { _ =>
           println("Local Sort & Partition Completed.")

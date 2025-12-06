@@ -13,9 +13,15 @@ import java.nio.file.{Files, Paths}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
-class ShuffleWorkerService(workerId: Int, port: Int, savePath: String, workerCount: Int) {
+class ShuffleWorkerService(
+                            workerId: Int,
+                            port: Int,
+                            savePath: String,
+                            workerCount: Int,
+                            checkShuffleComplete: () => Boolean
+                          ) {
   private val RECORD_SIZE = 100
-  private val READ_SIZE = 100
+  private val READ_SIZE = 1000
   private val fileRepository = new DiskFileStorageRepository()
   private val grpcRepository = new GrpcShuffleWorkerRepository(
     onReceiveBatch = onReceiveBatch,
@@ -64,8 +70,6 @@ class ShuffleWorkerService(workerId: Int, port: Int, savePath: String, workerCou
     val receivingFilePath = savePath + s"/shuffling/fromWorker$opponent.dat"
     fileRepository.deleteFile(receivingFilePath)
 
-
-
     grpcRepository.start(role, partnerPort, partnerIp).recoverWith { case ex: Throwable =>
       println(s"[Worker $workerId] Round $roundId failed. Cleaning up garbage data...")
 
@@ -76,6 +80,10 @@ class ShuffleWorkerService(workerId: Int, port: Int, savePath: String, workerCou
   }
   
   private def onReceiveBatch(rb: RecordBatch): Future[Unit] = {
+    if (checkShuffleComplete()) {
+      return Future.successful(())
+    }
+    
     Future {
       val path = savePath + s"/shuffling/fromWorker$opponent.dat"
       fileRepository.saveRecord(path, recordBatchToArr(rb), true)

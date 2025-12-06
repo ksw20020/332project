@@ -145,6 +145,7 @@ class GrpcShuffleWorkerRepository(
 
       override def onError(t: Throwable): Unit = {
         println(s"[Stream] Error: ${t.getMessage}")
+        shutdown()
         promise.tryFailure(t)
       }
 

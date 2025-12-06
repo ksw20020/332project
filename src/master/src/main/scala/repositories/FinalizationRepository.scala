@@ -13,36 +13,38 @@ class FinalizationRepository(workerCount: Int)
 
   // Master 입장에서 "모든 워커 준비 완료"를 기다릴 Future
   def allWorkersReady: Future[Unit] = allDonePromise.future
-
-  // Worker → Master : "나 finalize 준비됨"
   override def reportFinalize(
-      req: WorkerFinalizeRequest
-  ): Future[WorkerFinalizeResponse] = {
+                               req: WorkerFinalizeRequest
+                             ): Future[WorkerFinalizeResponse] = {
 
     val wid = req.workerId - 1
-    var allReady = false
 
     this.synchronized {
       if (wid >= 0 && wid < workerCount) {
-        finalizeFlags(wid) = true
-        if (!finalizeFlags.contains(false)) {
-          allReady = true
-        }
+        finalizeFlags(wid) = true // Promise 성공 로직 제거
       }
     }
-
-    if (allReady) {
-      // 한 번만 성공하도록 시도
-      allDonePromise.trySuccess(())
-    }
-
+    // Master는 플래그만 업데이트하고 바로 응답
     Future.successful(WorkerFinalizeResponse(ok = true))
   }
 
   // Worker → Master : "모두 준비될 때까지 기다렸다가, 준비되면 ok 돌려줘"
   override def sendFinalizeSignal(
-      req: FinalizeSignalRequest
-  ): Future[FinalizeSignalResponse] = {
+                                   req: FinalizeSignalRequest
+                                 ): Future[FinalizeSignalResponse] = {
+
+    // [변경점] Promise 성공 조건을 sendFinalizeSignal 내부에서 검사
+    val allReady = this.synchronized {
+      !finalizeFlags.contains(false)
+    }
+
+    if (allReady) {
+      // 모든 워커가 reportFinalize를 완료했다면,
+      // 이 시점(즉, 마지막 워커가 sendFinalizeSignal을 요청했을 때)에 Promise를 성공시킴.
+      allDonePromise.trySuccess(())
+    }
+
+    // Promise가 성공할 때까지 대기
     allWorkersReady.map { _ =>
       FinalizeSignalResponse(ok = true)
     }

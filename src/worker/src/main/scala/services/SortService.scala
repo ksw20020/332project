@@ -13,7 +13,7 @@ class SortService(
 )(implicit ec: ExecutionContext) {
 
   private val RECORD_SIZE = 100
-  private val READ_SIZE = 10000
+  private val READ_SIZE = 50000
 
   def sortNextBatch(filePath: String, offset: Long): Future[RecordBatch] = {
     Future {

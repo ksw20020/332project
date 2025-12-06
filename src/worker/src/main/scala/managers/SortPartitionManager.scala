@@ -12,7 +12,7 @@ class SortPartitionManager(
   temp: String
 )(implicit ec: ExecutionContext) {
 
-  private val BLOCK_SIZE_BYTES = 100 * 10000L
+  private val BLOCK_SIZE_BYTES = 100 * 50000L
   private val MAX_MERGE_FACTOR = 100
 
   def start_local(

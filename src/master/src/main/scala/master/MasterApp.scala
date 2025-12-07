@@ -92,7 +92,6 @@ object MasterApp {
       }
     })
 
-    server.shutdown()
     server.awaitTermination()
     println(s"${regManager.getRegisteredWorkers.map { case (workerId, (ip, port)) => ip }.mkString(", ")}")
   }

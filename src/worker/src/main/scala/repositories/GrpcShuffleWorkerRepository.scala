@@ -33,7 +33,7 @@ class GrpcShuffleWorkerRepository(
     val isClientActive = clientChannel != null && !clientChannel.isShutdown
 
     if (isServerActive || isClientActive) {
-      println("[WorkerNode] Communication is already in progress. Ignoring new start request.")
+      //println("[WorkerNode] Communication is already in progress. Ignoring new start request.")
       // 이미 실행 중인 작업이 있으므로, 현재 요청은 무시하고 성공 처리(혹은 기존 Future 반환 설계 필요)
       return Future.successful(())
     }
@@ -81,7 +81,7 @@ class GrpcShuffleWorkerRepository(
       .build()
       .start()
 
-    println(s"[WorkerNode] Server started on $port")
+    //println(s"[WorkerNode] Server started on $port")
   }
 
   /**
@@ -96,7 +96,7 @@ class GrpcShuffleWorkerRepository(
     val stub = WorkerExchangerGrpc.stub(clientChannel)
     val stubs = HealthCheckServiceGrpc.blockingStub(clientChannel)
 
-    println(s"[WorkerNode] Connected to peer $peerHost:$peerPort")
+    //println(s"[WorkerNode] Connected to peer $peerHost:$peerPort")
     @tailrec
     def retrySendReady(): Unit = {
       try {
@@ -106,7 +106,7 @@ class GrpcShuffleWorkerRepository(
 
       } catch {
         case e: StatusRuntimeException =>
-          println("retry")
+          //println("retry")
           Thread.sleep(1000)
           retrySendReady()
       }
@@ -139,18 +139,18 @@ class GrpcShuffleWorkerRepository(
         }
       } catch {
         case e: Exception =>
-          println(s"CRITICAL ERROR in onNext: ${e.getMessage}")
-          e.printStackTrace()
+          //println(s"CRITICAL ERROR in onNext: ${e.getMessage}")
+          //e.printStackTrace()
       }
 
       override def onError(t: Throwable): Unit = {
-        println(s"[Stream] Error: ${t.getMessage}")
+        //println(s"[Stream] Error: ${t.getMessage}")
         shutdown()
         promise.tryFailure(t)
       }
 
       override def onCompleted(): Unit = {
-        println("[Stream] Completed")
+        //println("[Stream] Completed")
         sendComplete()
         shutdown()
         promise.trySuccess(())
@@ -160,14 +160,14 @@ class GrpcShuffleWorkerRepository(
 
   /** Process RecordBatch */
   private def handleRecordBatch(rb: RecordBatch): Unit = {
-    println("get batch")
+    //println("get batch")
     val f = onReceiveBatch(rb)
 
     f.onComplete { _ => sendReady() }
   }
 
   private def handleReady(): Unit = {
-    println("get ready")
+    //println("get ready")
     if (!getFirstRequest.getAndSet(true)) {
       sendReady()
     }
@@ -184,7 +184,7 @@ class GrpcShuffleWorkerRepository(
   }
 
   private def handleDone(): Unit = {
-    println("get Done")
+    //println("get Done")
     if (isSendingDone.get()) {
       if (clientStream != null) {
         sendComplete()
@@ -202,7 +202,7 @@ class GrpcShuffleWorkerRepository(
     )
 
     sendMessage(ready)
-    println("sent ready")
+    //println("sent ready")
   }
 
   /** Send RecordBatch */
@@ -211,20 +211,20 @@ class GrpcShuffleWorkerRepository(
       ExchangeMsg.Msg.Batch(rb)
     )
     sendMessage(msg)
-    println("sent batch")
+    //println("sent batch")
   }
 
   private def sendDone(): Unit = {
     val ready = ExchangeMsg(
       ExchangeMsg.Msg.Done(Done(done = true))
     )
-    println("sent done")
+    //println("sent done")
 
     sendMessage(ready)
   }
 
   private def sendComplete(): Unit = {
-    println("complete")
+    //println("complete")
     if (clientStream != null) clientStream.onCompleted()
     clientStream = null
   }

@@ -14,21 +14,23 @@ class GrpcShuffleMasterRepository(
     override def onNext(msg: ShuffleMsg): Unit = {
       msg.payload match {
         case ShuffleMsg.Payload.Start(start) =>
-          println(s"Worker $workerId: Start round ${start.round} with partner ${start.partnerIp}:${start.partnerPort}")
+          //println(s"Worker $workerId: Start round ${start.round} with partner ${start.partnerIp}:${start.partnerPort}")
 
           // [변경] 마스터가 준 정보를 콜백으로 넘김
           onStartRound(start.round, start.partnerIp, start.partnerPort)
 
         case _ =>
-          println(s"Worker $workerId: Unknown message received")
+          //println(s"Worker $workerId: Unknown message received")
       }
     }
 
     override def onError(t: Throwable): Unit =
-      println(s"Worker $workerId: Stream error: ${t.getMessage}")
+      print("")
+      //println(s"Worker $workerId: Stream error: ${t.getMessage}")
 
     override def onCompleted(): Unit =
-      println(s"Worker $workerId: Stream completed by master")
+      print("")
+      //println(s"Worker $workerId: Stream completed by master")
   }
 
   private lazy val requestObserver: StreamObserver[ShuffleMsg] =

@@ -20,7 +20,7 @@ class RegistrationManager(
 
     val myPort = 5002
 
-    println(s"[Init] Detected Address: $myIp:$myPort")
+    //println(s"[Init] Detected Address: $myIp:$myPort")
 
     service.register(myIp, myPort)
   }

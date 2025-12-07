@@ -25,15 +25,17 @@ class SamplingRepository(
           requestObserver.onCompleted()
 
         case _ =>
-          println(s"Worker $workerId: Unknown message received")
+          //println(s"Worker $workerId: Unknown message received")
       }
     }
 
     override def onError(t: Throwable): Unit =
-      println(s"Worker $workerId: Stream error: ${t.getMessage}")
+      print("")
+      //println(s"Worker $workerId: Stream error: ${t.getMessage}")
 
     override def onCompleted(): Unit = {
-      println(s"Worker $workerId: Stream completed by master")
+      print("")
+      //println(s"Worker $workerId: Stream completed by master")
     }
   }
 

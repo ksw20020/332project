@@ -43,14 +43,14 @@ class ShuffleWorkerService(
       if (Files.exists(source)) {
         try {
           Files.move(source, dest)
-          println(s"[Worker $workerId] Successfully moved self-data to $destPathStr")
+          //println(s"[Worker $workerId] Successfully moved self-data to $destPathStr")
         } catch {
           case e: Exception =>
-            println(s"[Worker $workerId] Failed to move self-data: ${e.getMessage}")
+            //println(s"[Worker $workerId] Failed to move self-data: ${e.getMessage}")
             throw e
         }
       } else {
-        println(s"[Worker $workerId] No self-data found at $sourcePathStr. Skipping move.")
+        //println(s"[Worker $workerId] No self-data found at $sourcePathStr. Skipping move.")
       }
     }
   }
@@ -71,7 +71,7 @@ class ShuffleWorkerService(
     fileRepository.deleteFile(receivingFilePath)
 
     grpcRepository.start(role, partnerPort, partnerIp).recoverWith { case ex: Throwable =>
-      println(s"[Worker $workerId] Round $roundId failed. Cleaning up garbage data...")
+      //rintln(s"[Worker $workerId] Round $roundId failed. Cleaning up garbage data...")
 
       fileRepository.deleteFile(receivingFilePath)
 

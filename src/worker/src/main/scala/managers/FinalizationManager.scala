@@ -8,12 +8,12 @@ class WorkerFinalizationManager(
 ) {
 
   def start(): Future[Unit] = {
-    println("[Worker] Reporting finalize-ready...")
+    //println("[Worker] Reporting finalize-ready...")
     service.reportFinalizeReady().flatMap { _ =>
-      println("[Worker] Waiting finalize signal...")
+      //println("[Worker] Waiting finalize signal...")
       service.receiveFinalizeSignal().flatMap(_ => service.waitFinalizeSignal())
     }.map { _ =>
-      println("[Worker] Finalize signal received. Shutting down worker.")
+      //println("[Worker] Finalize signal received. Shutting down worker.")
     }
   }
 }

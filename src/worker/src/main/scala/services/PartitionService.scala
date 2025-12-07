@@ -30,7 +30,7 @@ class PartitionService(
     uniqueId: String
   ): Map[Int, File] = {
     
-    println(s"[PartitionService] Starting partitioning of ${sortedRecords.length} records.")
+    //println(s"[PartitionService] Starting partitioning of ${sortedRecords.length} records.")
 
     // streamMap 대신, 어떤 파일에 쓰여지고 있는지 파일 객체 정보를 저장합니다.
     val outputFileMap = scala.collection.mutable.Map[Int, File]()
@@ -56,13 +56,13 @@ class PartitionService(
         )
       }
       
-      println(s"[PartitionService] Finished writing temp files for ${outputFileMap.size} destination workers.")
+      //println(s"[PartitionService] Finished writing temp files for ${outputFileMap.size} destination workers.")
       outputFileMap.toMap
 
     } catch {
       case e: Exception =>
         // I/O 오류 또는 파티션 오류 발생 시 예외 전파 (스트림 관리는 Repository 내부로 이동)
-        println(s"Partitioning error: ${e.getMessage}")
+        //println(s"Partitioning error: ${e.getMessage}")
         throw e
     } finally {
       // Stream 관리는 Repository 내부로 이동했으므로, 여기서는 자원 해제 코드가 불필요하거나,

@@ -61,7 +61,7 @@ class DiskFileStorageRepository extends FileStorageRepository {
           records += Record(buffer.clone())
         } else if (bytesRead == -1) {
           // 파일 끝에 도달 (예상보다 일찍)
-          println(s"Warning: Reached EOF earlier than expected at offset $offset.")
+          //println(s"Warning: Reached EOF earlier than expected at offset $offset.")
           return records.toList
         } else {
           throw new IOException(s"Incomplete record read: $bytesRead bytes instead of $RECORD_SIZE.")

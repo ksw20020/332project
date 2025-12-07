@@ -20,7 +20,7 @@ class SortPartitionManager(
     ranges: Array[PartitionRange]
   ): Future[Unit] = {
     
-    println(s"[SortPartitionManager] Starting Phase 1: Sort & Partition (creating chunks)...")
+    //println(s"[SortPartitionManager] Starting Phase 1: Sort & Partition (creating chunks)...")
 
     // 1. 모든 입력 파일을 청크 단위로 나누어 파티셔닝 (중간 파일 생성)
     val futures = inputFiles.map { filePath =>
@@ -29,7 +29,7 @@ class SortPartitionManager(
 
     // 2. 모든 파티셔닝 작업이 끝나면, 로컬 머지 수행
     Future.sequence(futures).flatMap { _ =>
-      println("[SortPartitionManager] Phase 1 Done. Starting Phase 1.5: Local Merge...")
+      //println("[SortPartitionManager] Phase 1 Done. Starting Phase 1.5: Local Merge...")
       mergeLocalChunks(ranges)
     }
   }
@@ -66,7 +66,7 @@ class SortPartitionManager(
           // 예: temp/partition_for_worker_1.dat
           val finalLocalFile = s"$temp/temp_partition_for_worker_$wid.dat"
           
-          println(s"[LocalMerge] Merging ${chunkFiles.size} chunks into $finalLocalFile")
+          //println(s"[LocalMerge] Merging ${chunkFiles.size} chunks into $finalLocalFile")
 
           recursiveMerge(chunkFiles, finalLocalFile, wid, 0)
         } else {
@@ -83,7 +83,7 @@ class SortPartitionManager(
     outputFilePath: String
   ): Future[Unit] = {
     
-    println(s"[SortPartitionManager] Starting Merge Sort -> $outputFilePath")
+    //println(s"[SortPartitionManager] Starting Merge Sort -> $outputFilePath")
     
     sortService.kWayMerge(inputPartitionFiles, outputFilePath)
   }
@@ -97,14 +97,14 @@ class SortPartitionManager(
 
     // 종료 조건: 파일이 병합 인자(MAX_MERGE_FACTOR)보다 적으면 한 번에 병합하여 끝냄
     if (files.size <= MAX_MERGE_FACTOR) {
-      println(s"[LocalMerge] Worker $workerId (Final Pass): Merging ${files.size} files -> $outputFile")
+      //println(s"[LocalMerge] Worker $workerId (Final Pass): Merging ${files.size} files -> $outputFile")
       sortService.kWayMerge(files, outputFile).map { _ =>
         // 원본 청크들 삭제
         files.foreach(f => new File(f).delete())
       }
     } else {
       // 진행: 파일을 배치 단위로 잘라서 중간 파일(intermediate) 생성
-      println(s"[LocalMerge] Worker $workerId (Pass $pass): Merging ${files.size} files in batches of $MAX_MERGE_FACTOR...")
+      //println(s"[LocalMerge] Worker $workerId (Pass $pass): Merging ${files.size} files in batches of $MAX_MERGE_FACTOR...")
 
       // 파일을 MAX_MERGE_FACTOR 개수만큼 그룹으로 나눔
       val batches = files.grouped(MAX_MERGE_FACTOR).toSeq

@@ -97,7 +97,7 @@ class SamplingService(
         }
       } catch {
         case exception: Exception =>
-          println(s"Error reading file: ${exception.getMessage}")
+          //println(s"Error reading file: ${exception.getMessage}")
       }
       finally {
         if (bis != null) bis.close()

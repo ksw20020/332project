@@ -7,9 +7,11 @@ import sampling.grpcSampling.SamplingServiceGrpc
 import shuffle.control.grpcShuffle.ShuffleControlServiceGrpc
 import finalization.grpcFinalization.FinalizationServiceGrpc
 
+import java.net.{InetAddress, NetworkInterface}
 import java.util.concurrent.TimeUnit
 import scala.concurrent.ExecutionContext.Implicits.global
 import java.util.logging.Logger
+import scala.collection.JavaConverters.enumerationAsScalaIteratorConverter
 
 // 패키지 경로에 맞춰 import (가정)
 import managers.{RegistrationManager, SamplingManager, ShuffleManager}
@@ -31,6 +33,8 @@ object MasterApp {
     //println(s"=== Initializing Master Server ===")
     //println(s"Port: $port")
     //println(s"Expected Worker Count: $workerCount")
+
+    println(s"$getPrivateIp:$port")
 
     // 2. Repository 생성 (gRPC Service 구현체)
     val regRepo = new GrpcRegisterRepository(workerCount)
@@ -90,5 +94,15 @@ object MasterApp {
     })
 
     server.awaitTermination()
+    println(s"${regManager.getRegisteredWorkers.map { case (workerId, (ip, port)) => ip }.mkString(", ")}")
+  }
+
+
+  private def getPrivateIp: String = {
+    NetworkInterface.getNetworkInterfaces.asScala
+      .flatMap(_.getInetAddresses.asScala)
+      .find(addr => !addr.isLoopbackAddress && addr.isSiteLocalAddress && !addr.getHostAddress.contains(":"))
+      .map(_.getHostAddress)
+      .getOrElse(InetAddress.getLocalHost.getHostAddress)
   }
 }

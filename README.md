@@ -1,5 +1,45 @@
 # 332project
 
+## Build and Run
+
+This project consists of `master` and `worker` modules. You must build them using **sbt**.
+Upon successful build, the executable artifacts (`master.jar` and `worker.jar`) will be generated directly in the **project root directory**.
+
+### 1. Build
+Generate the assembly JARs for both modules:
+
+```bash
+# Build Master
+sbt master/assembly
+
+# Build Worker
+sbt worker/assembly
+```
+Output: master.jar and worker.jar will be created in the root directory.
+
+### 2. Execution
+#### Master Node
+Run the master node first. You must specify the expected number of workers.
+
+```Bash
+java -jar master.jar {workerCount}
+```
+- {workerCount}: The total number of worker nodes to wait for.
+
+#### Worker Node
+Run the worker nodes. You need to specify the Master's IP address and port, as well as input/output directories.
+
+```Bash
+java -jar worker.jar {masterIP:Port} -I {inputFileDirectory} -O {outputFileDirectory}
+```
+- {masterIP:Port}: The IP address and port where the Master is listening (e.g., 2.2.2.254:50051).
+
+- -I: Flag specifying the input file directory from here.
+
+- -O: Flag specifying the output file directory. Only One output directory is acceptable.
+
+<br>
+
 ## Weekly Progress
 
 ### Week 1 [link](https://github.com/ksw20020/332project/pull/1)
@@ -91,6 +131,16 @@ jdk 등 개발환경 세팅, 프로젝트 추가 <br>
 | 김성원 | 스크립트 작성 및 디버깅 |
 | 진시완 | 종료 시그널 구현, 디버깅 |
 | 채동욱 | 7주차에 발생한 오류 케이스 수정,  디버깅 |
+
+### Week 8
+통합 테스트 및 버그 수정
+ - 7주차에서 fault tolerance 관련해 빠진 부분 구현
+   - 워커와 마스터 간 마지막 종료 시그널 추가
+   - 종료 시점 별 케이스 분석 및 오류 수정
+ - Sorting에서 블럭이 마지막 블럭만 남는 오류 수정
+ - Directory이름 불일치 이슈 수정
+ - 셔플 완료 이후 deadworker를 위한 셔플 진행 시 기존 파일 덮어쓰는 문제 수정
+ - println 로깅 제거
 
 <br>
 <br>

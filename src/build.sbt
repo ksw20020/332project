@@ -30,6 +30,10 @@ lazy val master = (project in file("master"))
     // [설정] Master의 메인 클래스 지정 (패키지명.클래스명 정확히 입력)
     // 예: mainClass in assembly := Some("MasterApp"),
     assembly / mainClass := Some("master.MasterApp"),
+    assembly / assemblyJarName := "master.jar",
+
+    // 2. [변경] 저장 경로를 루트 디렉터리로 변경
+    assembly / target := (ThisBuild / baseDirectory).value,
     commonAssemblySettings, // 위에서 정의한 합치기 전략 적용
 
     libraryDependencies ++= Seq(
@@ -47,6 +51,10 @@ lazy val worker = (project in file("worker"))
     name := "worker",
     // [설정] Worker의 메인 클래스 지정
     assembly / mainClass := Some("worker.WorkerApp"),
+    assembly / assemblyJarName := "worker.jar",
+
+    // 2. [변경] 저장 경로를 루트 디렉터리로 변경
+    assembly / target := (ThisBuild / baseDirectory).value,
     commonAssemblySettings,
 
     libraryDependencies ++= Seq(

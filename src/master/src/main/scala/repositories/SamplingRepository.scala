@@ -22,16 +22,16 @@ class SamplingRepository extends SamplingServiceGrpc.SamplingService {
             onWorkerRequest(req.workerId, req.samples)
             
           case _ =>
-            println("Unknown SamplingMsg payload received")
+            //println("Unknown SamplingMsg payload received")
         }
       }
 
       override def onError(t: Throwable): Unit = {
-        println(s"Stream error: ${t.getMessage}")
+        //println(s"Stream error: ${t.getMessage}")
       }
 
       override def onCompleted(): Unit ={
-        println("Sampling Stream completed by remote worker")
+        //println("Sampling Stream completed by remote worker")
         responseObserver.onCompleted()
       }
     }

@@ -21,16 +21,16 @@ object MasterApp {
   def main(args: Array[String]): Unit = {
     // 1. 입력값 파싱 (워커 수)
     if (args.length < 1) {
-      println("Usage: MasterApp <worker-count>")
+      //println("Usage: MasterApp <worker-count>")
       sys.exit(1)
     }
 
     val workerCount = args(0).toInt
     val port = 5001
 
-    println(s"=== Initializing Master Server ===")
-    println(s"Port: $port")
-    println(s"Expected Worker Count: $workerCount")
+    //println(s"=== Initializing Master Server ===")
+    //println(s"Port: $port")
+    //println(s"Expected Worker Count: $workerCount")
 
     // 2. Repository 생성 (gRPC Service 구현체)
     val regRepo = new GrpcRegisterRepository(workerCount)
@@ -51,7 +51,7 @@ object MasterApp {
     val finalizationManager = new FinalizationManager(finalizationService)
 
     // 5. Manager 로직 시작 (Non-blocking)
-    println("Starting managers...")
+    //println("Starting managers...")
     regManager.start()       // 등록 대기 시작
     sampManager.start()    // 샘플링/파티셔닝 준비
     shuffleManager.shuffle()    // 셔플/소트 준비
@@ -67,7 +67,7 @@ object MasterApp {
       .build()
 
     server.start()
-    println(s"Master Server started successfully on port $port")
+    //println(s"Master Server started successfully on port $port")
 
     finalizationManager.start {
       server.shutdown
@@ -83,9 +83,9 @@ object MasterApp {
     // 7. 서버 종료 전까지 메인 스레드 대기
     Runtime.getRuntime.addShutdownHook(new Thread {
       override def run(): Unit = {
-        println("*** shutting down gRPC server since JVM is shutting down")
+        //println("*** shutting down gRPC server since JVM is shutting down")
         server.shutdown()
-        println("*** server shut down")
+        //println("*** server shut down")
       }
     })
 

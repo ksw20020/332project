@@ -22,12 +22,12 @@ class GrpcShuffleRepository extends ShuffleControlServiceGrpc.ShuffleControlServ
             }
             onWorkerRoundDone(done.workerId, done.round)
           case _ =>
-            println("Unknown ShuffleMsg payload received")
+            //println("Unknown ShuffleMsg payload received")
         }
       }
 
       override def onError(t: Throwable): Unit = {
-        println(s"Stream error: ${t.getMessage}")
+        //println(s"Stream error: ${t.getMessage}")
 
         findWorkerId(responseObserver).foreach { deadWorkerId =>
           workerStreams.remove(deadWorkerId)
@@ -37,7 +37,7 @@ class GrpcShuffleRepository extends ShuffleControlServiceGrpc.ShuffleControlServ
 
 
       override def onCompleted(): Unit ={
-        println("Stream completed by remote worker")
+        //println("Stream completed by remote worker")
 
         findWorkerId(responseObserver).foreach { deadWorkerId =>
           workerStreams.remove(deadWorkerId)

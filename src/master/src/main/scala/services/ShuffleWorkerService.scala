@@ -37,7 +37,7 @@ class ShuffleWorkerService(
   private def onWorkerRoundDone(workerId: Int, roundId: Int): Unit = {
     // [Case A] 재부팅 감지: 죽었던 놈이 0라운드(Sort) 끝내고 옴 -> Catch-Up 시작
     if (roundId == 0 && workerId == deadWorkerId) {
-      println(s"Reboot detected. Worker $workerId starting Catch-Up.")
+      //println(s"Reboot detected. Worker $workerId starting Catch-Up.")
       startCatchUpProcess(workerId)
       return
     }
@@ -72,7 +72,7 @@ class ShuffleWorkerService(
           }
 
         case _ =>
-          println(s"Ignored duplicate or late Done(worker=$workerId round=$roundId)")
+          //println(s"Ignored duplicate or late Done(worker=$workerId round=$roundId)")
       }
     }
   }
@@ -100,7 +100,7 @@ class ShuffleWorkerService(
   private def checkAndTriggerDeferredCatchUp(finishedWorkerId: Int): Unit = {
     deferredCatchUp match {
       case Some((rebootId, round, partnerId)) if partnerId == finishedWorkerId =>
-        println(s"[CatchUp] Partner $partnerId is now IDLE. Resuming Catch-Up Round $round for $rebootId")
+        //println(s"[CatchUp] Partner $partnerId is now IDLE. Resuming Catch-Up Round $round for $rebootId")
         this.synchronized {
           deferredCatchUp = None
         } // 대기열 해제
@@ -111,7 +111,7 @@ class ShuffleWorkerService(
   }
 
   private def onWorkerDead(workerId: Int): Unit = {
-    println(s"[Master] Worker $workerId DEAD reported.")
+    //println(s"[Master] Worker $workerId DEAD reported.")
     deadWorkerId = workerId
   }
 
@@ -151,7 +151,7 @@ class ShuffleWorkerService(
 
   private def catchUpLoop(rebootedWorkerId: Int, roundToRun: Int): Unit = {
     if (roundToRun == currentGlobalRound) {
-      println(s"Catch-Up Finished. Joining Global Round $roundToRun")
+      //println(s"Catch-Up Finished. Joining Global Round $roundToRun")
       broadcastToPairOnly(rebootedWorkerId, roundToRun)
       return
     }
@@ -171,10 +171,10 @@ class ShuffleWorkerService(
       val isPartnerIdle = isWorkerIdleInCurrentRound(partnerId)
 
       if (isPartnerIdle) {
-        println(s"[CatchUp] Partner $partnerId is IDLE. Executing Round $roundToRun immediately.")
+        //println(s"[CatchUp] Partner $partnerId is IDLE. Executing Round $roundToRun immediately.")
         broadcastToPairOnly(rebootedWorkerId, roundToRun)
       } else {
-        println(s"[CatchUp] Partner $partnerId is BUSY. Deferring Round $roundToRun.")
+        //println(s"[CatchUp] Partner $partnerId is BUSY. Deferring Round $roundToRun.")
         this.synchronized {
           deferredCatchUp = Some((rebootedWorkerId, roundToRun, partnerId))
         }

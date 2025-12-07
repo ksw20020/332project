@@ -81,7 +81,6 @@ object MasterApp {
         case ex: InterruptedException =>
       }
       server.shutdownNow()
-      return
     }
 
     // 7. 서버 종료 전까지 메인 스레드 대기
@@ -93,6 +92,7 @@ object MasterApp {
       }
     })
 
+    server.shutdown()
     server.awaitTermination()
     println(s"${regManager.getRegisteredWorkers.map { case (workerId, (ip, port)) => ip }.mkString(", ")}")
   }
